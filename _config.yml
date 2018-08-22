@@ -707,6 +707,7 @@ vendors:
 css: assets/css
 js: assets/js
 images: assets/images
+repository: thy00/thy00.github.io
 
 # Theme version
 version: 5.1.1
