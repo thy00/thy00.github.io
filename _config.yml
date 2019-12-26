@@ -4,10 +4,10 @@
 # ---------------------------------------------------------------
 
 # Site
-title: floatthy
-subtitle:
+title:
+subtitle: 小站
 description:
-author: thy
+author: floatthy
 # Support language: de, en, fr-FR, id, ja, ko, pt-BR, pt, ru, zh-Hans, zh-hk, zh-tw
 language: zh-Hans
 date_format: '%Y-%m-%d'
@@ -123,7 +123,7 @@ menu:
   archives: /archives/
   tags: /tags/
   #sitemap: /sitemap.xml
-  #commonweal: /404.html
+  commonweal: /404.html
 
 
 # Enable/Disable menu icons.
@@ -233,7 +233,8 @@ social_icons:
 
 # Sidebar Avatar
 # in directory: /assets/images/avatar.gif
-#avatar:
+avatar:
+  avatar.jpg
 
 
 # Table Of Contents in the Sidebar
@@ -701,7 +702,6 @@ vendors:
   # Internal version: 3.3.0
   # https://github.com/ethantw/Han
   han:
-post_asset_folder: true
 
 # Assets
 css: assets/css
