@@ -1,5 +1,5 @@
 ---
-title:  今天的测试bug
+title:  超长事务
 categories: 
  - 事务
 tags: 日常
@@ -30,7 +30,7 @@ set global slow_query_log = 1;
 
 开启之后查看获得慢日志文件路径
 
-![image-20191225160802348](2019-12-25-mysql%E6%85%A2%E6%97%A5%E5%BF%97%E6%9F%A5%E8%AF%A2/image-20191225160802348.png)
+![image-20191225160802348](/images/2019-12-25/image-20191225160802348.png)
 
 2. 慢日志过期时间修改
 
@@ -56,8 +56,9 @@ long_query_time = 1
 select * from sys.processlist
 ```
 
-![image-20191226161950639](2019-12-25-mysql%E6%85%A2%E6%97%A5%E5%BF%97%E6%9F%A5%E8%AF%A2/image-20191226161950639.png)
+![image-20191226161950639](/images/2019-12-25/image-20191226161950639.png)
 
+里面有几个比较重要的字段
 里面有几个比较重要的字段
 
 - `db`  线程的默认数据库

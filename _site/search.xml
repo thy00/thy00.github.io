@@ -2,6 +2,40 @@
 <search>
   
     <entry>
+      <title><![CDATA[超长事务]]></title>
+      <url>/%E4%BA%8B%E5%8A%A1/2019/12/25/transaction/</url>
+      <content type="text"><![CDATA[java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms数据库连接超时，需要查看哪个连接部分事务没有停止Lock wait timeout exceeded; try restarting transactionmysql慢日志查询  慢日志开启#查看是否开启show variables like '%slow_query_log%';#开启set global slow_query_log = 1;开启之后查看获得慢日志文件路径  慢日志过期时间修改# 查看过期时间show variables like 'long_query_time';因为是在测试环境，所以直接修改配置文件内容slow_query_log_file = /slow.loglong_query_time = 1修改慢日志的路径，并且配置需要记录的过期时间  查看打印的慢日志打印发现没有查询很慢的语句，于是需要排查没有结束的事务select * from sys.processlist里面有几个比较重要的字段里面有几个比较重要的字段  db  线程的默认数据库      command  对于前台线程，线程正在代表 client 执行的命令类型，如果 session 是 idle 则为Sleep        last_statement  如果当前没有执行语句或等待，则由线程执行的最后一个语句    last_statement_latency  How long the last statement executed可以看出确实有部分语句事务执行时间过长select taskdetail0.id as id1 … uid=157734172287109 for updateselect taskdetail0.id as id1 … uid=157734176692108 for updateselect * from performance_schema.events_statements_current查到最后执行的查询语句由查到的查询语句找到了超长事务的语句，我这里结果就不展示了。观察代码发现，事务本身不会出现死锁的情况，因为是删除操作不存在需要数据一致的情况只需要查询存在然后删除就可以了，存在表锁的表已经加了悲观锁，然后没有表锁的语句的查询语句放置在事务之外，所以不会是进入死锁，查看打印的语句也没有发现死锁。最后回到超长事务这里，发现在事务里面我有做一个从oss删除的操作。。。问题就在这里吧，删除操作需要数秒，从而导致在并发情况下事务一直不能提交从而会有各种timeout。问题解决]]></content>
+      <categories>
+        
+          <category> 事务 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 日常 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[今天的测试bug]]></title>
+      <url>/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/2019/12/17/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95bug/</url>
+      <content type="text"><![CDATA[远程调用异常2019-12-16 16:49:50.706 nacos [http-nio-8062-exec-21] ERROR c.f.s.c.InterfaceRequestErrrorAndPerformanceLog - RuntimeException{方法：Result com.fy.server.controller.SliceController.deleteSlice(Long)， 参数：[157648617865460],异常：Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;application=fy-server&amp;bean.name=ServiceBean:sliceService&amp;category=providers&amp;check=false&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.fy.common.service.slice.SliceService&amp;lazy=false&amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;path=com.fy.common.service.slice.SliceService&amp;pid=33176&amp;protocol=dubbo&amp;qos-enable=false&amp;register=true&amp;register.ip=183.6.56.146&amp;release=2.7.2&amp;remote.application=fy-slice&amp;revision=1.1.0.RELEASE&amp;side=consumer&amp;sticky=false&amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&gt; /183.6.56.146:20881}org.apache.dubbo.rpc.RpcException: Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;application=fy-server&amp;bean.name=ServiceBean:sliceService&amp;category=providers&amp;check=false&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.fy.common.service.slice.SliceService&amp;lazy=false&amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;path=com.fy.common.service.slice.SliceService&amp;pid=33176&amp;protocol=dubbo&amp;qos-enable=false&amp;register=true&amp;register.ip=183.6.56.146&amp;release=2.7.2&amp;remote.application=fy-slice&amp;revision=1.1.0.RELEASE&amp;side=consumer&amp;sticky=false&amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&gt; /183.6.56.146:20881Got unchecked and undeclared exception which called by 183.6.56.146. service: com.fy.common.service.slice.GroupService, method: create, exception: java.lang.NullPointerException: null, dubbo version: 2.7.2, current host: 183.6.56.146D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t    -l D:\test\baogao2.txt -e -o D:\test\baogao2D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t  D:\test\http—183-6-56-146-8000-sliceadmin00.jmx  -l D:\test\baogao6.txt -e -o D:\test\baogao6oss SDK异常SocketTimeoutException has occurred on a socket read or accept.Server unreachable: javax.net.ssl.SSLHandshakeException: Remote host closed connection during handshakeServer unreachable: java.net.ConnectException: Connection timed out: connect大部分是因为网络带宽不够，于是取消对前端的测试11:38HikariPool-1 - Connection is not available, request timed out after 30000ms数据库连接超时 —&gt;减少数据库连接缓解方式：      使用redis        在查询模型的时候当第一次校验通过之后，将用户信息和模型信息保存在内存（设置过期时间，不然内存泄漏），第二次查询的时候直接访问内存获取模型权限（在模型删除、变更持有者和删除分享对象的时候需要删除对应用户和模型的关系）    再考虑一次为什么不使用redis，redis可以多服务端共享并且过期和持久化都不需要自己实现，但是会增加网络的开销。综合来说先考虑使用redis作为缓存  org.hibernate.StaleStateException: Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1这是由于有一个表需要有查询条件，然后条件为null导致。sql查询的时候内部是有先后顺序和逻辑关联的，为什么为null呢，因为这是一个多表联查，关联的表数据已经被删除，所以关联的键自然也不存在，所以就返回了错误]]></content>
+      <categories>
+        
+          <category> 性能测试 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
       <title><![CDATA[微服务]]></title>
       <url>/2019/11/06/%E5%BE%AE%E6%9C%8D%E5%8A%A1/</url>
       <content type="text"><![CDATA[akf拆分三个维度拆分删除没有限定是管理员getUserInfo 接口删除generateInvCodeForAdmin 没有限定管理员recharge 充值没有限定管理员daogetUserWithOSSPathByModelUid 去掉模型getPerm会出错，需要修改reset 没有限定管理员dsl删除用户点云数量adminSearch  modelservice 没有限定为管理员adminDelete 没有限定为管理员adminAdd 没有限定为管理员getUserInfo 被删除数据库微服务改造在老系统中存在很多跨表join查询，然而在微服务改造过程中，跨表变为了跨库，在跨库的情况下如何解决join查询的问题需要解决1、冗余储存在查询的被关联表冗余查询以空间换时间优点：查询效率较高缺点：需要建立同步机制，不然容易产生脏数据2、表同步依赖字段很多做表同步ETL工具跨库缺点：同步不建议实时性过高，否则影响性能3、数据字典表在每个数据库中对静态不会修改的字段冗余保存一份4、服务层数据组装Domain Driven Design书单：领域驱动设计实现领域驱动拆分职责划分通用性划分大中台小前台粒度满足业务需求团队成员工作量适中增量迭代  修改只涉及到有限的服务风险可控数据建模mysqlWorkbench实际开发流程：MySQL底层是通过数据页存储spring boot 可以读取jar包相同路径的配置文件运维要求]]></content>
