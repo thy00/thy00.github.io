@@ -1,4 +1,520 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   
+    <entry>
+      <title><![CDATA[超长事务]]></title>
+      <url>/%E4%BA%8B%E5%8A%A1/2019/12/25/transaction/</url>
+      <content type="text"><![CDATA[java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms数据库连接超时，需要查看哪个连接部分事务没有停止Lock wait timeout exceeded; try restarting transactionmysql慢日志查询  慢日志开启#查看是否开启show variables like '%slow_query_log%';#开启set global slow_query_log = 1;开启之后查看获得慢日志文件路径  慢日志过期时间修改# 查看过期时间show variables like 'long_query_time';因为是在测试环境，所以直接修改配置文件内容slow_query_log_file = /slow.loglong_query_time = 1修改慢日志的路径，并且配置需要记录的过期时间  查看打印的慢日志打印发现没有查询很慢的语句，于是需要排查没有结束的事务select * from sys.processlist里面有几个比较重要的字段里面有几个比较重要的字段  db  线程的默认数据库      command  对于前台线程，线程正在代表 client 执行的命令类型，如果 session 是 idle 则为Sleep        last_statement  如果当前没有执行语句或等待，则由线程执行的最后一个语句    last_statement_latency  How long the last statement executed可以看出确实有部分语句事务执行时间过长select taskdetail0.id as id1 … uid=157734172287109 for updateselect taskdetail0.id as id1 … uid=157734176692108 for updateselect * from performance_schema.events_statements_current查到最后执行的查询语句由查到的查询语句找到了超长事务的语句，我这里结果就不展示了。观察代码发现，事务本身不会出现死锁的情况，因为是删除操作不存在需要数据一致的情况只需要查询存在然后删除就可以了，存在表锁的表已经加了悲观锁，然后没有表锁的语句的查询语句放置在事务之外，所以不会是进入死锁，查看打印的语句也没有发现死锁。最后回到超长事务这里，发现在事务里面我有做一个从oss删除的操作。。。问题就在这里吧，删除操作需要数秒，从而导致在并发情况下事务一直不能提交从而会有各种timeout。问题解决]]></content>
+      <categories>
+        
+          <category> 事务 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 日常 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[今天的测试bug]]></title>
+      <url>/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/2019/12/17/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95bug/</url>
+      <content type="text"><![CDATA[远程调用异常2019-12-16 16:49:50.706 nacos [http-nio-8062-exec-21] ERROR c.f.s.c.InterfaceRequestErrrorAndPerformanceLog - RuntimeException{方法：Result com.fy.server.controller.SliceController.deleteSlice(Long)， 参数：[157648617865460],异常：Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;application=fy-server&amp;bean.name=ServiceBean:sliceService&amp;category=providers&amp;check=false&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.fy.common.service.slice.SliceService&amp;lazy=false&amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;path=com.fy.common.service.slice.SliceService&amp;pid=33176&amp;protocol=dubbo&amp;qos-enable=false&amp;register=true&amp;register.ip=183.6.56.146&amp;release=2.7.2&amp;remote.application=fy-slice&amp;revision=1.1.0.RELEASE&amp;side=consumer&amp;sticky=false&amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&gt; /183.6.56.146:20881}org.apache.dubbo.rpc.RpcException: Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;application=fy-server&amp;bean.name=ServiceBean:sliceService&amp;category=providers&amp;check=false&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.fy.common.service.slice.SliceService&amp;lazy=false&amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;path=com.fy.common.service.slice.SliceService&amp;pid=33176&amp;protocol=dubbo&amp;qos-enable=false&amp;register=true&amp;register.ip=183.6.56.146&amp;release=2.7.2&amp;remote.application=fy-slice&amp;revision=1.1.0.RELEASE&amp;side=consumer&amp;sticky=false&amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&gt; /183.6.56.146:20881Got unchecked and undeclared exception which called by 183.6.56.146. service: com.fy.common.service.slice.GroupService, method: create, exception: java.lang.NullPointerException: null, dubbo version: 2.7.2, current host: 183.6.56.146D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t    -l D:\test\baogao2.txt -e -o D:\test\baogao2D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t  D:\test\http—183-6-56-146-8000-sliceadmin00.jmx  -l D:\test\baogao6.txt -e -o D:\test\baogao6oss SDK异常SocketTimeoutException has occurred on a socket read or accept.Server unreachable: javax.net.ssl.SSLHandshakeException: Remote host closed connection during handshakeServer unreachable: java.net.ConnectException: Connection timed out: connect大部分是因为网络带宽不够，于是取消对前端的测试11:38HikariPool-1 - Connection is not available, request timed out after 30000ms数据库连接超时 —&gt;减少数据库连接缓解方式：      使用redis        在查询模型的时候当第一次校验通过之后，将用户信息和模型信息保存在内存（设置过期时间，不然内存泄漏），第二次查询的时候直接访问内存获取模型权限（在模型删除、变更持有者和删除分享对象的时候需要删除对应用户和模型的关系）    再考虑一次为什么不使用redis，redis可以多服务端共享并且过期和持久化都不需要自己实现，但是会增加网络的开销。综合来说先考虑使用redis作为缓存  org.hibernate.StaleStateException: Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1这是由于有一个表需要有查询条件，然后条件为null导致。sql查询的时候内部是有先后顺序和逻辑关联的，为什么为null呢，因为这是一个多表联查，关联的表数据已经被删除，所以关联的键自然也不存在，所以就返回了错误]]></content>
+      <categories>
+        
+          <category> 性能测试 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[微服务]]></title>
+      <url>/2019/11/06/%E5%BE%AE%E6%9C%8D%E5%8A%A1/</url>
+      <content type="text"><![CDATA[akf拆分三个维度拆分删除没有限定是管理员getUserInfo 接口删除generateInvCodeForAdmin 没有限定管理员recharge 充值没有限定管理员daogetUserWithOSSPathByModelUid 去掉模型getPerm会出错，需要修改reset 没有限定管理员dsl删除用户点云数量adminSearch  modelservice 没有限定为管理员adminDelete 没有限定为管理员adminAdd 没有限定为管理员getUserInfo 被删除数据库微服务改造在老系统中存在很多跨表join查询，然而在微服务改造过程中，跨表变为了跨库，在跨库的情况下如何解决join查询的问题需要解决1、冗余储存在查询的被关联表冗余查询以空间换时间优点：查询效率较高缺点：需要建立同步机制，不然容易产生脏数据2、表同步依赖字段很多做表同步ETL工具跨库缺点：同步不建议实时性过高，否则影响性能3、数据字典表在每个数据库中对静态不会修改的字段冗余保存一份4、服务层数据组装Domain Driven Design书单：领域驱动设计实现领域驱动拆分职责划分通用性划分大中台小前台粒度满足业务需求团队成员工作量适中增量迭代  修改只涉及到有限的服务风险可控数据建模mysqlWorkbench实际开发流程：MySQL底层是通过数据页存储spring boot 可以读取jar包相同路径的配置文件运维要求]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[书单]]></title>
+      <url>/2019/10/31/%E4%B9%A6%E5%8D%95/</url>
+      <content type="text"><![CDATA[Balancing Agility and Discipline  软件架构]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[Js整理]]></title>
+      <url>/2019/10/31/js%E6%95%B4%E7%90%86/</url>
+      <content type="text"><![CDATA[NodejsNpmnpm全称为Node Package Manager，是一个基于Node.js的包管理器，也是整个Node.js社区最流行、支持的第三方模块最多的包管理器。aws redshiftAmazon Redshift 是一种可轻松扩展的完全托管型 PB 级数据仓库服务，可与您现有的商业智能工具协作。它通过使用列存储技术和并行化多个节点的查询来提供快速的查询性能这种方式运行部分JavaScript代码没有问题，但由于浏览器的安全限制，以file://开头的地址无法执行如联网等JavaScript代码，最终，你还是需要架设一个Web服务器，然后以http://开头的地址来正常执行所有JavaScript代码第一种是==比较，它会自动转换数据类型再比较，很多时候，会得到非常诡异的结果；第二种是===比较，它不会自动转换数据类型，如果数据类型不一致，返回false，如果一致，再比较。由于JavaScript这个设计缺陷，不要使用==比较，始终坚持使用===比较。null表示一个“空”的值，它和0以及空字符串''不同，0是一个数值，''表示长度为0的字符串，而null表示“空”。 在JavaScript中，还有一个和null类似的undefined，它表示“未定义”。如果if的条件判断语句结果不是true或false怎么办？例如：var s = '123';if (s.length) { // 条件计算结果为3    //}JavaScript把null、undefined、0、NaN和空字符串''视为false，其他值一概视为true，因此上述代码条件判断的结果是true。async返回值为一个promise对象，需要通过then函数获得具体返回值模块加载机制Node自动在js文件加载时包裹匿名函数，使得内部变量变成局部变量js字符串转义字符\可以转义很多字符，比如\n表示换行，\t表示制表符，字符\本身也要转义，所以\\表示的字符就是\。Js数组Array可以通过索引把对应的元素修改为新的值，因此，对Array的索引进行赋值会直接修改这个Array：请注意，如果通过索引赋值时，索引超过了范围，同样会引起Array大小的变化：Javascript不能直接用==或者===来判断两个数组是否相等，无论是相等还是全等都不行，以下两行JS代码都会返回false&lt;script type="text/javascript"&gt;　　alert([]==[]);　　alert([]===[]);&lt;/script&gt;要判断JS中的两个数组是否相同，需要先将数组转换为字符串，再作比较。以下两行代码将返回true对象xiaohong的属性名middle-school不是一个有效的变量，就需要用''括起来。访问这个属性也无法使用.操作符，必须用['xxx']来访问：作用域Windowvar arr=[];for(var i=0;i&lt;s.length;i++){arr=arr.concat(s[i]);}console.log(arr);return arr.map(function pow(x) {  return x * 1;}).reduce(function(x,y){return x*10+y;});  将字符串转换成数字 使用map和reduce方法]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[管理后台]]></title>
+      <url>/2019/10/25/%E7%AE%A1%E7%90%86%E5%90%8E%E5%8F%B0/</url>
+      <content type="text"><![CDATA[[TOC]模型列表介绍变更搜索用户列表搜索同模型列表使用方法添加编辑充额重置角色设置管理用户角色是对不同组的成员访问后台接口的权限控制。规则：  所有人都可以访问用户的权限  超级管理员可访问所有资源  开发和运营不能访问对方有但自己没有的资源  部分资源没有加入权限管理的范围，比如登录接口，但是在这里却显示可以设置（这是一个bug，但是修改起来繁琐不影响使用就没有实现）添加修改删除个人信息修改管理员管理添加从用户组添加编辑编辑同用户组编辑删除服务器状态api文档]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[任务]]></title>
+      <url>/2019/10/10/%E4%BB%BB%E5%8A%A1/</url>
+      <content type="text"><![CDATA[切片待优化：将任务的数量的统计使用count具体任务，从而减少数据库读写错误导致计数错误   todo（放在后面）统一异常捕获返回   统一异常捕获返回效率较慢，没有必要统一模型权限控制   todo一个函数里面多个事务提交（保证一致性）     todo  —事务在 for update的查询语句保存之后还会锁表，直到结束，所以不合适，需要修改业务调用使用乐观锁，将计数的功能移到redis（是一种解决办法，后面优化）待增加功能：后台框架调整已有任务：1、三维数据管理前端更新后台修改2、切片服务维护和bug修复3、用户系统与APP打通4、对外的计算服务搭建5、新的文件储存方式解决   SAN6、切片公司管理后台前端和后台7、桥的管理系统和数据库、dao层开发8、广州历史地图历史街区更新（待定）  订单系统  账号合并  模型合并  APP新版  三维数据移动端之前需要做：  方舆管理          角色及管理      平台用户，要能够修改额度      模型      切片      ]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[锁]]></title>
+      <url>/%E9%94%81/2019/09/30/%E9%94%81%E7%AD%89%E5%BE%85%E4%B8%8E%E6%AD%BB%E9%94%81/</url>
+      <content type="text"><![CDATA[MVCC：Multi-Version Concurrent Control 多版本并发控制排它锁其他事务不能读取和修改MySQL有三种级别：页级、表级、行级。表级锁：开销小，加锁快；锁定粒度大，发生锁冲突的概率最高,并发度最低。行级锁：开销大，加锁慢；锁定粒度最小，发生锁冲突的概率最低,并发度也最高。页面锁：开销和加锁时间界于表锁和行锁之间；锁定粒度界于表锁和行锁之间，并发度一般共享锁其他事务可以读取，不能修改发生死锁原因      业务逻辑问题，使得上锁顺序颠倒。锁表和锁行都可能发生    共享锁上升到排它锁  在锁有索引的情况下，如果在索引里面有多个添加索引的字段，字段顺序相反mysql innodb乐观锁悲观锁  获取结果集之后，对结果集加行锁  对于非主键、非索引字段查询加表锁sql语句实现：通过for update（在没有指定主键的情况下，innodb的行锁将变成表锁）解决：幻读引发：死锁（两个(或以上)的Session加锁的顺序不一致）Jpa实现  线程加上事务： @Transactional(isolation = Isolation.READ_COMMITTED) 等注意：事务注解添加的时候嵌套容易引发死锁  自己写的查询语句注解：@Lock(value = LockModeType.PESSIMISTIC_WRITE)]]></content>
+      <categories>
+        
+          <category> 锁 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[项目管理]]></title>
+      <url>/git/2019/09/30/github%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86/</url>
+      <content type="text"><![CDATA[  本地拥有所有的git记录，所以大部分操作都是本地进行  git保证完整性通过hash算法获得散列值  project]]></content>
+      <categories>
+        
+          <category> git </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[loadRunner]]></title>
+      <url>/%E5%8E%8B%E6%B5%8B/2019/09/09/loadRunner/</url>
+      <content type="text"><![CDATA[负载测试&amp;压力测试&amp;性能测试性能调优  通过对处在特定环境下的系统进行测试以完成相关的验证，而且往往要根据测试的结果，对系统的设计、代码和配置等进行调整，提高系统的性能。许多时候，系统性能的改善是测试、调整、再测试、再调整、……一个持续改进的过程负载测试获得系统正常工作时所能承受的最大负荷（容量）压力测试系统奔溃的极限条件以及系统是否能自我恢复性能测试获取系统在特定条件下的性能指标数据步骤创建脚本中央控制器调度虚拟用户运行并获得结果性能需求多少用户做什么业务的响应时间控制在某个范围tps不低于系统资源占用整体平稳socket_io脚本我想用loadrunner测试websocketlr12写好脚本，然而只支持50的并发，根本不够用。然后换回11,11和12的脚本不兼容，并且11也支持100的websocket测试，，，，所以做了一个决定，抛弃各种限制的loadrunner，改用jmeter测试pv page view内存泄露连接泄露性能瓶颈top]]></content>
+      <categories>
+        
+          <category> 压测 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[jpa实体继承]]></title>
+      <url>/orm/2019/09/04/jpa%E5%AE%9E%E4%BD%93%E7%BB%A7%E6%89%BF/</url>
+      <content type="text"><![CDATA[继承映射如果只想要生成一张表，可以指定映射策略@Inheritance(strategy = InheritanceType.SINGLE_TABLE)简单用法父：import lombok.Data;import javax.persistence.*;import java.io.Serializable;/** * @author: thy * @date: 2019/9/4 * @description: */@Entity@Data@Inheritance(strategy = InheritanceType.SINGLE_TABLE)public class People implements Serializable {    private static final long serialVersionUID = 6254092813095169295L;    @Id    @GeneratedValue(strategy = GenerationType.IDENTITY)    protected Integer id;    protected String name;}子：import com.scan.test.People;import lombok.Data;import lombok.EqualsAndHashCode;import javax.persistence.Column;import javax.persistence.Entity;/** * @author: thy * @date: 2019/9/4 * @description: */@EqualsAndHashCode(callSuper = true)@Entity@Datapublic class Student extends People {    private static final long serialVersionUID = 2241366750854518413L;    private int className;}获得一张表CREATE TABLE people (  dtype varchar(31) NOT NULL,  id int(11) NOT NULL AUTO_INCREMENT,  name varchar(255) DEFAULT NULL,  class_name int(11) DEFAULT NULL,  PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8;注意：无论多少子类都只生成一张表，通过dtype字段区分不同子类。应用场景为同一种类多个对象的数据储存实验在父对象添加属性，在数据库能否生成成功复杂用法父：import lombok.Data;import javax.persistence.*;import java.io.Serializable;/** * @author: thy * @date: 2019/9/4 * @description: */@Entity@Data@Inheritance(strategy = InheritanceType.SINGLE_TABLE)@Table(indexes = {@Index(columnList = "uid", unique = true),        @Index(columnList = "studentUid")})public class People implements Serializable {    private static final long serialVersionUID = 6254092813095169295L;    @Id    @GeneratedValue(strategy = GenerationType.IDENTITY)    protected Integer id;    protected Integer uid;    protected Integer studentUid;    protected String name;}子：import com.scan.test.People;import lombok.Data;import lombok.EqualsAndHashCode;import javax.persistence.Column;import javax.persistence.Entity;/** * @author: thy * @date: 2019/9/4 * @description: */@EqualsAndHashCode(callSuper = true)@Entity@Datapublic class Student extends People {    private static final long serialVersionUID = 2241366750854518413L;    @Column(unique = true)    private int className;}获得表：CREATE TABLE people (  dtype varchar(31) NOT NULL,  id int(11) NOT NULL AUTO_INCREMENT,  name varchar(255) DEFAULT NULL,  student_uid int(11) DEFAULT NULL,  uid int(11) DEFAULT NULL,  class_name int(11) DEFAULT NULL,  PRIMARY KEY (id),  UNIQUE KEY UK98584pow8829ecp9w7fwbvocw (uid),  UNIQUE KEY UK_n00mlaw19y2hphh71hwt4lc3l (class_name),  KEY IDXjt0gho5f24xg5n8c710r8723a (student_uid)) ENGINE=InnoDB DEFAULT CHARSET=utf8;不管是父类和子类添加的属性都在数据表映射成功还可以指定其他两种映射策略，这边就不展开讲部分继承@MappedSuperclass只有子类会生成数据表，父类的属性同样会写进子类的表中简单用法父：import lombok.Data;import javax.persistence.*;import java.io.Serializable;/** * @author: thy * @date: 2019/9/4 * @description: */@Data@MappedSuperclasspublic class People implements Serializable {    private static final long serialVersionUID = 6254092813095169295L;    @Id    @GeneratedValue(strategy = GenerationType.IDENTITY)    protected Integer id;    protected String name;}子：import com.scan.test.People;import lombok.Data;import lombok.EqualsAndHashCode;import javax.persistence.Column;import javax.persistence.Entity;/** * @author: thy * @date: 2019/9/4 * @description: */@EqualsAndHashCode(callSuper = true)@Entity@Datapublic class Student extends People {    private static final long serialVersionUID = 2241366750854518413L;    private int className;}创建数据表：CREATE TABLE student (  id int(11) NOT NULL AUTO_INCREMENT,  name varchar(255) DEFAULT NULL,  class_name int(11) NOT NULL,  PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8;注意：是使用子类生成的数据表，子类的数据表会包含父类的属性对象，并且继承的父类的id定义复杂用法父：import lombok.Data;import javax.persistence.*;import java.io.Serializable;/** * @author: thy * @date: 2019/9/4 * @description: */@MappedSuperclass@Data@Table(indexes = {@Index(columnList = "uid", unique = true),        @Index(columnList = "studentUid")})public class People implements Serializable {    private static final long serialVersionUID = 6254092813095169295L;    @Id    @GeneratedValue(strategy = GenerationType.IDENTITY)    protected Integer id;    protected Integer uid;    protected Integer studentUid;    protected String name;}子：import com.scan.test.People;import lombok.Data;import lombok.EqualsAndHashCode;import javax.persistence.Column;import javax.persistence.Entity;/** * @author: thy * @date: 2019/9/4 * @description: */@EqualsAndHashCode(callSuper = true)@Entity@Datapublic class Student extends People {    private static final long serialVersionUID = 2241366750854518413L;    private int className;}创建数据表：CREATE TABLE student (  id int(11) NOT NULL AUTO_INCREMENT,  name varchar(255) DEFAULT NULL,  student_uid int(11) DEFAULT NULL,  uid int(11) DEFAULT NULL,  class_name int(11) NOT NULL,  PRIMARY KEY (id)) ENGINE=InnoDB DEFAULT CHARSET=utf8;注意：@table定义的索引都没有成功。在使用@MappedSuperclass的时候需要注意，因为父类不是entity对于table的定义在父类都不会生效。只有是针对属性的定义能够在子类生成的数据表里面映射https://blog.csdn.net/heardy/article/details/7924192https://www.ibm.com/developerworks/cn/java/j-lo-hibernatejpa/index.html]]></content>
+      <categories>
+        
+          <category> orm </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[权限]]></title>
+      <url>/%E6%9D%83%E9%99%90/2019/08/23/%E6%9D%83%E9%99%90/</url>
+      <content type="text"><![CDATA[      私人资源 (Personal Resource )    角色资源 (Roles Resource )    公共资源 (Public Resource )    “私人资源”：是属于某一个用户所有的资源，只有用户本人才能操作，其他用户不能操作。例如用户的个人信息、订单、收货地址等等。“角色资源”：与私人资源不同，角色资源范畴更大，一个角色可以对应多个人，也就是一群人。如果给某角色分配了权限，那么只有身为该角色的用户才能拥有这些权限。例如系统资源只能够管理员操作，一般用户不能操作。“公共资源”：所有人无论角色都能够访问并操作的资源。OAuth1、将用户和角色的关联解耦，通过用户、超级管理员、开发、运营等等分组。用户和分组联系2、设置shiro角色的时候，把资源和admin关联，减少查询次所]]></content>
+      <categories>
+        
+          <category> 权限 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[Bug]]></title>
+      <url>/2019/08/16/bug/</url>
+      <content type="text"><![CDATA[List&lt;TaskDetails&gt; taskDetails = taskInfoRepository.findTaskInfosByRunningAndTaskNameAndSuccessAndReadyOrderBySortNum(false, taskName, null, true);List&lt;TaskDetails&gt; infos = taskInfoRepository.findTaskInfosByTaskNameAndSuccessAndReadyOrderBySortNum(taskDetails.getTaskName(), null,true);org.springframework.transaction.UnexpectedRollbackException: Transaction silently rolled back because it has been marked as rollback-only错误：name名字过长，崩溃点云不重复  这个代码示例写的非常浅显易懂，但是需要注意的是：基于@ControllerAdvice注解的全局异常统一处理只能针对于Controller层的异常，意思是只能捕获到Controller层的异常，在service层或者其他层面的异常都不能捕获。https://blog.csdn.net/hao_kkkkk/article/details/80538955pointcut表达式https://blog.csdn.net/elim168/article/details/78150438AuthorizationFilter 与  AuthenticatingFilterAuthorizationFilter ：用户必须登录http乱码问题https://www.ibm.com/developerworks/cn/web/wa-lo-ecoding-response-problem/index.htmlutf-8与gbk乱码https://blog.csdn.net/yangfengjueqi/article/details/79486162Lock wait timeout exceeded  innodb_lock_wait_timeout：innodb的dml操作的行级锁的等待时间  lock_wait_timeout：数据结构ddl操作的锁的等待时间修改表锁为行锁（查询字段建立索引）Deadlock found when trying to get lock;com.fy.slice.service.impl.TaskServiceImpl.endModelTask(TaskServiceImpl.java:538)com.fy.slice.socket.SocketMonitor.taskComplete(SocketMonitor.java:239)com.fy.slice.service.impl.TaskServiceImpl.endModelTask(TaskServiceImpl.java:555)com.fy.slice.socket.SocketMonitor.taskComplete(SocketMonitor.java:239)死锁2com.fy.slice.service.impl.TaskServiceImpl.endModelTask(TaskServiceImpl.java:543)com.fy.slice.socket.SocketMonitor.taskComplete(SocketMonitor.java:239)com.fy.slice.service.impl.TaskServiceImpl.endModelTask(TaskServiceImpl.java:560)com.fy.slice.socket.SocketMonitor.taskComplete(SocketMonitor.java:239)//这个地方要修改findTaskDetailsByUid不知道为什么这里是表锁数据库连接池溢出死锁com.fy.slice.service.impl.TaskServiceImpl.runTask(TaskServiceImpl.java:175)com.fy.slice.socket.SocketMonitor.taskComplete(SocketMonitor.java:257)原因：1、查询顺序相反，相互等待2、行锁是锁定索引，如果有两个不同的索引，在查询的时候顺序不一致行锁也会相互等待死锁锁等待超时org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection; nested exception is org.hibernate.exception.JDBCConnectionException: Unable to acquire JDBC Connection把重排序改掉Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30001ms.锁等待超时com.fy.slice.service.impl.TaskServiceImpl.setNewTask(TaskServiceImpl.java:106)死锁问题已经解决，锁超时不是因为死锁Caused by: com.mysql.jdbc.exceptions.jdbc4.MySQLIntegrityConstraintViolationException: Duplicate entry ‘156931932998685’ for key ‘UK4x24q048ngkkl5w07q9tvewjb’com.fy.slice.service.impl.TaskServiceImpl.setNewTask(TaskServiceImpl.java:106)socket事件超时因为切片发送的数据量比较大，容易发生切片连接超时的情况，设置的超时时间为5s，一旦超时，web端会标记为发送失败。但是计算端实际上是收到消息只是一直堵塞在管道中，在超过5s之后会成功接收；解决办法：  减少data的数据量  减少事件发送次数并发状态下，数据库连接超时  java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms  减轻数据库查询压力  2019-10-10 17:21:41.195 default [nioEventLoopGroup-3-3] ERROR c.c.socketio.handler.InPacketHandler - Error during data processing. Client sessionId: 2832a508-fc22-4360-98ca-d23bc5e4aa81, data: java.lang.NullPointerException: nullwindows 下jvm调优10并发 400使用java虚拟机使用率100%优化轮询数据库连接timeout增加1、找到pid2、下载线程查看工具 Process Explore地址：http://technet.microsoft.com/en-us/sysinternals/bb896653.aspx3、解压运行，找到对应pid，右键properties找到占用cpu高的进程tidtid集合：67606512347646481180564058766528446433965948标红7540标红4、将tid转换为16进制，使用电脑自带计算器即可5、运行命令 ：jstack -l &lt;pid&gt; &gt; c:/&lt;pid&gt;.stack获得.stack的文件6、使用16进制的tid查找.stack文件获得，线程的堆栈信息堆栈里面的错误信息堆栈认识java.lang.Thread.State: TIMED_WAITING (parking)  at sun.misc.Unsafe.park(Native Method)  parking to wait for  &lt;0x00000006c17a07b0&gt; (a java.util.concurrent.SynchronousQueue$TransferQueue)at java.util.concurrent.locks.LockSupport.parkNanos(Unknown Source)at java.util.concurrent.SynchronousQueue$TransferQueue.awaitFulfill(Unknown Source)at java.util.concurrent.SynchronousQueue$TransferQueue.transfer(Unknown Source)at java.util.concurrent.SynchronousQueue.poll(Unknown Source)at com.zaxxer.hikari.util.ConcurrentBag.borrow(ConcurrentBag.java:157)at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:173)at com.zaxxer.hikari.pool.HikariPool.getConnection(HikariPool.java:155)at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:128)at org.hibernate.engine.jdbc.connections.internal.DatasourceConnectionProviderImpl.getConnection(DatasourceConnectionProviderImpl.java:122)由堆栈信息可以得知，线程等待的原因是没有拿到数据库连接池里的线程java.lang.Thread.State: RUNNABLE阻塞状态不是因为锁等待，而是因为网络读取java.lang.Thread.State: WAITING (on object monitor)  这两种情况在多线程的情况下经常出现，Java是通过Monitor来实现线程互斥和协作。可以把monitor理解成一个锁，每个对象实例都有且仅有一个。某个时刻monitor只能被一个线程占有，该线程就是Active Thread，而其它线程都是Waiting Thread，Waiting Thread分布在entry set和wait set两个集合中，所下图所示：有可能哦方法：将连接池变大java.lang.Thread.State: TIMED_WAITING (sleeping)jpa缓存一级缓存：session级别]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[socket.io]]></title>
+      <url>/%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE/2019/08/09/webSocket/</url>
+      <content type="text"><![CDATA[定义：标准RFC6455，并由RFC7936补充  RFC 是一系列以编号排定的文件，它由一系列草案和标准组成。几乎所有互联网通信协议均记录在 RFC 中，例如 HTTP 协议标准轮询comet   http长连接webSocket第一次发送http请求升级协议为webSocket升级标识为http header的upgrade字段  GET /chat HTTP/1.1Host: server.example.comUpgrade: websocketConnection: UpgradeSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==Origin: http://example.comSec-WebSocket-Protocol: chat, superchatSec-WebSocket-Version: 13  In compliance with [RFC2616], header fields in the handshake may be sent by the client in any order, so the order in which different header fields are received is not significant.返回消息  HTTP/1.1 101 Switching Protocols Upgrade: websocket Connection: Upgrade Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo= Sec-WebSocket-Protocol: chat传输数据帧socket iosocket io不仅仅是websocket的封装，支持很多不支持websocket的浏览器，使用升降级的机制engine.io是socket io的底层库，写了一套协议进行升降级以及通讯的规范当使用websocket协议通讯的时候  412203[“XX4”,{XX5}]engine.io  0 open：从服务端发出，标识一个新的传输方式已经打开。  1 close：请求关闭这条传输连接，但是它本身并不关闭这个连接。  2 ping：客户端周期性发送ping，服务端响应pong。注意这个与uwsgi自带的ping/pong不一样，uwsgi里面发送ping，而浏览器返回pong。  3 pong：服务端发送。  4 message：实际发送的消息。  5 upgrade：在转换transport前，engine.io会发送探测包测试新的transport（如websocket）是否可用，如果OK，则客户端会发送一个upgrade消息给服务端，服务端关闭老的transport然后切换到新的transport。  6 noop：空操作数据包，客户端收到noop消息会将之前等待暂停的轮询暂停，用于在接收到一个新的websocket强制一个新的轮询周期。socket发送消息到对应客户端是维护了一个消息队列  socket.io服务器发送消息要基于engine.io消息包装，所以归结到底还是调用的engine.io套接字中的send()方法。engine.io为每个客户端都会维护一个消息队列，发送数据都是先存到队列里面待拉取，websocket除了探测帧之外的其他数据帧也都是通过该消息队列发送。socket io通信过程的参数说明请求连接  http://127.0.0.1/socket.io/?EIO6=3&amp;transport7=polling&amp;t8=MAkXxBR返回结果:response header  HTTP/1.1 200 OKcontent-type: application/octet-stream   9connection: keep-aliveset-cookie: io=c1996d8b-5720-4697-977b-3d5224725d86server: netty-socketio/1.7.17access-control-allow-origin: http://183.6.56.146:8000access-control-allow-credentials: truecontent-length: 118response body  ÿ0{“sid”:”c1996d8b-5720-4697-977b-3d5224725d86”,”upgrades”:[“websocket”],”pingInterval”:25000,”pingTimeout”:15000}payload其实包含两个packet，第一个packet是engine.io的OPEN消息，类型为0，它的内容为pingInterval，pingTimeout，sid等；第二个packet类型是4(message)，而它的数据内容是0，表示socket.io的CONNECT。而其中的看起来乱码的部分实则是前面提到的payload编码中的长度的编码\x00\x01\x00\x09\xff和\x00\x02\xff。升级协议  http://127.0.0.1/socket.io/? EIO=3&amp;transport=polling&amp;t=MAkXxEz&amp;sid10=9c54f9c1759c4dbab8f3ce20c1fe43a4升级到websocket协议进行数据传输发送消息  ws://127.0.0.1/socket.io/?EIO=3&amp;transport=websocket&amp;sid=9c54f9c1759c4dbab8f3ce20c1fe43a4request body  412203[“XX4”,{XX5}]            engine.io通信的标识，4代表服务端和客户端交换数据 &#8617; &#8617;2              事件的标志 &#8617; &#8617;2              事件必须确认，返回对应的确认消息 &#8617; &#8617;2              event名称，服务端监听 &#8617; &#8617;2              event的具体数据 &#8617; &#8617;2              engine.io版本号 &#8617;              传输协议 &#8617;              唯一字符串，使用yeast生成 &#8617;              字节流方式传输数据 &#8617;              engine.io 用来识别客户端的标志 &#8617;      ]]></content>
+      <categories>
+        
+          <category> 通信协议 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[Sw]]></title>
+      <url>/2019/08/08/sw/</url>
+      <content type="text"><![CDATA[]]></content>
+      <categories>
+        
+      </categories>
+      <tags>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[规范]]></title>
+      <url>/%E6%96%87%E6%A1%A3/2019/08/02/bug%E6%8E%92%E6%9F%A5/</url>
+      <content type="text"><![CDATA[错误数据：156465391545251 点云处理文件的时间段：09:59:41.01910:01:03.9701、不能传入id？结论：就是传入id的锅。save方法有update和insert两个用法。当有id时jpa会去数据库检查该id是否存在，如果存在则覆盖  2019-11-28 11:29:59.083 default [http-nio-8061-exec-14] ERROR o.h.e.jdbc.spi.SqlExceptionHelper - HikariPool-1 - Connection is not available, request timed out after 30000ms.2019-11-28 11:29:59.083 default [http-nio-8061-exec-14] ERROR o.h.e.jdbc.spi.SqlExceptionHelper - Communications link failure  The last packet sent successfully to the server was 0 milliseconds ago. The driver has not received any packets from the server.]]></content>
+      <categories>
+        
+          <category> 文档 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[规范]]></title>
+      <url>/%E6%96%87%E6%A1%A3/2019/08/01/%E5%90%8E%E5%8F%B0%E8%A7%84%E8%8C%83/</url>
+      <content type="text"><![CDATA[返回消息体  code  public static int SUCCESS=0;//成功public static int FAIL=-1;//失败public static int EXISTS=-2;//重复，存在public static int DELETED=-3;//曾经存在过，被删除了public static int UNAUTHEN=401;//用户未登录public static int SHIRO_ERR=444;//shiro认证错误public static int UNAUTHZ=403;//未授权，拒绝访问public static int SERVERERROR=2;//任务过程中服务器错误public static int CALERROR=3;//任务过程中计算错误    msg  data与前端服务端监听slice  /** * 切片类型 */int sliceType = 1;//切片的模式int isomeType = 2;//轴侧的模式int persType = 3;//透视的模式    参数略，参考现在切片参数download  /** * 下载列表的进度 */int progressFail=-1;//下载失败int progressReady=0;//开始下载int progressSuccess=100;//下载成功    参数略服务端发送slice 广播  略download 广播  略pointCloud 广播  略与计算服务端监听memory  记录下计算服务的内存情况、ip、在线情况  参数略completeTask  String pointCloudTaskName ="POINTCLOUD";//切片任务String modelTaskName="MODEL";//模型任务String sliceTaskName="SLICE";//切片任务    参数略服务端发送memoryMessage 广播、单播  略taskMessage 单播  略]]></content>
+      <categories>
+        
+          <category> 文档 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[mysql多表查询]]></title>
+      <url>/mysql/2019/07/30/mysql%E5%A4%9A%E8%A1%A8%E6%9F%A5%E8%AF%A2/</url>
+      <content type="text"><![CDATA[交叉连接]]></content>
+      <categories>
+        
+          <category> mysql </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[垃圾收集]]></title>
+      <url>/jvm/2019/07/25/JVM/</url>
+      <content type="text"><![CDATA[  垃圾收集即垃圾回收，简单的说垃圾回收就是回收内存中不再使用的对象。所谓使用中的对象（已引用对象），指的是程序中有指针指向的对象；而未使用中的对象（未引用对象），则没有被任何指针给指向，因此占用的内存也可以被回收掉。垃圾回收的步骤有两步：1、查找不再使用对象  2、释放占用内存GC判断策略引用计数算法计数器：引用+1，取消引用-1缺点：循环引用怎么算？根搜索算法GC Roots：引用起始点，如不可达对象，则认为对象未被引用。GC roots对象可以是：      虚拟机栈（栈帧中的本地变量表）中引用的对象；    方法区中类静态属性引用的对象；    方法区中常量应用的对象；    本地方法栈中JNI（Native方法）引用的对象。  GC收集算法标记-清除算法（三色）根搜索算法标记回收对象，完成后统一回收[^]: GC判断策略缺点：标记清除效率不高；空间碎片；复制算法将内存按容量分为相等的两块，只使用一块。当用完时，将活跃对象复制到没有使用过的一块，然后把满的内存清理标记-整理算法根搜索算法标记回收对象，然后移动活跃对象到一端，然后清除边界外对象分代收集算法（常用）老年代少量对象需要被回收老年代也满了之后会触发Full Gc新生代大量对象需要被回收新生成对象在Eden，回收一次将对象拷贝在s0（或s1）清空Eden；如果s0（或s1）满，则将s0（或s1）和Eden存活对象复制到s1（或s0）；如果s1（或s0）没有足够空间，则将对象存放到老年代永久代根搜索算法运行中新增的类存放在永久代，这里需要回收的内容有废弃的常量和无用的类。无用的类需要满足：      该类所有的实例都已经被回收，也就是Java堆中不存在该类的任何实例；    加载该类的ClassLoader已经被回收；    该类对应的java.lang.Class对象没有在任何地方被引用，无法在任何地方通过反射访问该类的方法。  引用：https://my.oschina.net/u/4007037/blog/3077770]]></content>
+      <categories>
+        
+          <category> jvm </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[bug]]></title>
+      <url>/bug/2019/07/23/%E6%97%A5%E5%B8%B8/</url>
+      <content type="text"><![CDATA[  Caused by: com.mysql.jdbc.PacketTooBigException: Packet for query is too large (1028 &gt; 1024). You can change this value on the server by setting the max_allowed_packet’ variable.测试服务器数据库最大包不断重置为1m由 https://www.jianshu.com/p/95e3b0f4e42a 可知：  mysqld里面控制的是服务端，mysql里面控制的是客户端，如果只设置一处，则当有客户端连接的时候，该值会被重置。  内存不足：当mysql执行大批次查询语句大时候，因为服务器内存不足，引起预警，mysql会重置这个值，已保证数据库的稳定。  黑客攻击：其实在生产环境下，大多数的情况，还真是被攻击了，针对这个情况，需要集中查看，安全不容小觑，mysql 有general_log, 会记录所有执行的sql命令，因为耗费性能，默认是关闭。要查看是否是黑客攻击需要打开日常sql日志：general_log解决办法：https://www.cnblogs.com/qdpurple/p/5742059.htmlweb服务端优化  使用redis作为缓存  将常访问并且不会修改的数据缓存入内存（这个在业务比较稳定的时候做）计算服务端优化  考虑大数据分布式的方式（不可行，文件细碎，时延较高）  将原文件和单独的fydata放到nas网络\192.168.3.241\slicedata\test\originalDir\192.168.3.241\slicedata\dev\originalDircpu利用率60+内存最小情况只剩100M登录失败: 未知的用户名或错误密码  2019-11-01 10:58:05.468 default [任务线程 - 30] ERROR com.fy.common.util.ExceptionUtil - java.io.IOException: 登录失败: 未知的用户名或错误密码。	at java.io.WinNTFileSystem.canonicalize0(Native Method)	at java.io.WinNTFileSystem.canonicalize(Unknown Source)	at java.io.File.getCanonicalPath(Unknown Source)	at org.apache.commons.io.FileUtils.copyFile(FileUtils.java:1079)	at org.apache.commons.io.FileUtils.copyFileToDirectory(FileUtils.java:1013)	at com.fy.slice.task.ProdTask.convertBigTxt(ProdTask.java:213)	at com.fy.slice.service.impl.TaskServiceImpl.runTask(TaskServiceImpl.java:304)	at com.fy.slice.service.impl.TaskServiceImpl.lambda$executeTask$1(TaskServiceImpl.java:246)	at java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)	at java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)	at java.lang.Thread.run(Unknown Source)发生一个很诡异的bug场景是将本地的文件拷贝到远程服务器，但是会报错，然后登陆服务器直接访问地址可以访问在开发环境通过账号密码也可以访问，直接运行报错的代码也可以正常拷贝解决办法运行 组策略编辑器 gpedit.msc -&gt;打开计算机配置-&gt;windows设置-&gt;安全设置-&gt;本地策略-&gt;安全选项中的：网络安全：LAN管理器身份验证级别，默认是“没有定义”，更改为“发送LM和NTLM响应”。网上修改lan管理器身份验证不起作用，仔细思考下可能是服务启动的用户不是当前的管理员用户， 服务程序运行的权限账户和远程共享文件的机器要运行在同一个域（Domain）使用pstool工具      下载psexec工具，这里有点慢要耐心等待        安装psexec工具，使用cmd cd到工具目录        重新打开一个窗口     psexec -i -s cmd.exe       命令映射网络驱动器    net use z: \\server_ip\share_folder /persistent:yes             重新运行服务，发现可以访问  修改服务运行的账户服务——&gt;右键”属性”——&gt;选择”登录”选项——&gt;选择”此帐户”——&gt;选择”浏览”——&gt;找到有权限对网络共享文件操作的帐户——&gt;重启服务——&gt; OK 执行成功failed with error: Could not read from remote repositoryssh为正常状态https://blog.csdn.net/u014202165/article/details/79612296https://zhuanlan.zhihu.com/p/62022220varchar长度  varchar 的最大长度受限于最大行长度（max row size，65535bytes）not null在最大长度的基础上dxf报错  2019-11-05 12:12:46.866 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - makeDxf cmd: \slice\dxfMaker\makedxf.exe -d \slice\zipDir\156801788389770\049-limian01 -i limian_0101_dhj.png,limian_01_03_dhj.png,limian_01_02_dhj.png -s limian_01_01_dhj_ACAD.scr,limian_01_03_dhj_ACAD.scr,limian_01_02_dhj_ACAD.scr -o 049-limian01.dxf2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - 2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - ————- start make dxf —————2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - +++layout: limian_01_01_dhj +++2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - imageWidth: 12740 imageHeight: 40002019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - resolution: 2.49999982665666482019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_width: 31.8499977916059082019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_height: 9.9999993066266592019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - +++layout: limian_0102_dhj +++2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - imageWidth: 12740 imageHeight: 40002019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - resolution: 2.49999982665666482019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_width: 31.8499977916059082019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_height: 9.9999993066266592019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - +++layout: limian_0102_dhj +++2019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - imageWidth: 12740 imageHeight: 40002019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - resolution: 2.49999982665666482019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_width: 31.8499977916059082019-11-05 12:12:47.554 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - unit_height: 9.9999993066266592019-11-05 12:12:47.648 default [任务线程 - 109] INFO  com.fy.common.util.ConvertUtil - 【readFile】：Code:  -12019-11-05 12:12:47.648 default [任务线程 - 109] INFO  c.f.s.s.i.SliceDownloadServiceImpl - 【packageSliceFile】fail {}java.lang.RuntimeException: exitValue !=-1	at com.fy.common.util.ConvertUtil.readFile(ConvertUtil.java:224)	at com.fy.common.util.ConvertUtil.makeDxf(ConvertUtil.java:193)	at com.fy.slice.service.impl.SliceDownloadServiceImpl.packageSliceFile(SliceDownloadServiceImpl.java:140)	at com.fy.slice.service.impl.SliceDownloadServiceImpl.lambda$zipSlice$0(SliceDownloadServiceImpl.java:61)	at java.util.concurrent.ThreadPoolExecutor.runWorker(Unknown Source)	at java.util.concurrent.ThreadPoolExecutor$Worker.run(Unknown Source)	at java.lang.Thread.run(Unknown Source)原因还是文件给错，但是dxfMaker对错误的文件没有正确响应]]></content>
+      <categories>
+        
+          <category> bug </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 日常 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[支付宝]]></title>
+      <url>/%E6%94%AF%E4%BB%98/2019/07/19/%E6%94%AF%E4%BB%98%E5%AE%9D/</url>
+      <content type="text"><![CDATA[场景：电脑网站支付]]></content>
+      <categories>
+        
+          <category> 支付 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[网关]]></title>
+      <url>/%E5%BE%AE%E6%9C%8D%E5%8A%A1/2019/07/18/%E7%BD%91%E5%85%B3%E6%9C%8D%E5%8A%A1/</url>
+      <content type="text"><![CDATA[]]></content>
+      <categories>
+        
+          <category> 微服务 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[常用设计模式]]></title>
+      <url>/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/2019/07/17/%E8%AE%BE%E8%AE%A1%E6%A8%A1%E5%BC%8F/</url>
+      <content type="text"><![CDATA[创建型模式创建对象的方式，隐藏具体的new方法，实例获得对象更加灵活。简单工厂  定义接口  创建接口的实现类  创建工厂类，根据参数返回抽象类的具体实现工厂工厂生产有品牌的产品，不由参数决定  定义接口  创建接口的实现类  定义抽象工厂  创建抽象工厂实现，决定工厂使用的实现类，使用时候直接调用工厂实现抽象工厂一个超级工厂指挥多个工厂组装产品  定义不同的接口  创建不同接口的实现类  根据项目具体情况决定具体工厂为简单工厂还是工厂  定义抽象工厂，不同的工厂方法  创建抽象工厂的实现类，这个实现类只实现工厂某一模块，根据参数返回接口的具体实现  创建工厂创造类，根据参数返回抽象工厂的实现类网上不同教程对抽象工厂的具体实现理解有出入，大体的思路是组装不同产品的一个工厂单例懒汉饿汉建筑者从简单对象构造复杂对象建造者导演  定义一个接口，包括属性和方法  定义接口中的抽象对象  创建接口的抽象对象的实现类  定义接口的抽象接口，再进行分类  创建分类接口的实现，得到具体对象  使用builder对建造对象组合，得到最终对象建造复杂对象的意义在于：  可以灵活构造对象，修改对象属性  可以对对象属性校验，对不符合要求的对象抛出异常  可以设定必填属性，控制对象的格式原型原型角色具体原型角色使用者利用Cloneable接口的clone方法创建对象，直接在内存中复制数据深拷贝与浅拷贝浅拷贝只拷贝对象基本数据类型，原型模式为浅拷贝深拷贝则是还需要拷贝数组、容器对象、引用对象等结构型模式关注类和对象的组合适配器适配器将原来不兼容的两个接口兼容行为型模式对象与对象的通信j2ee设计模式对外表示层的展现原则      开闭原则：对扩展开放，对修改关闭    里氏代换原则：基类出现的地方可以用子类实现    依赖倒转原则：针对接口编程，依赖于抽象而不依赖于具体    接口隔离原则：使用多个隔离的接口，而不要使用单个复合的接口    迪米特法则：功能模块相对独立    合成复用原则：尽量合成/聚合，而不是继承  ]]></content>
+      <categories>
+        
+          <category> 设计模式 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[微信支付]]></title>
+      <url>/%E6%94%AF%E4%BB%98/2019/07/17/%E5%BE%AE%E4%BF%A1%E6%94%AF%E4%BB%98/</url>
+      <content type="text"><![CDATA[公司业务场景为在网页端发起订单支付，通过阅读开发文档选择native扫码支付native两种模式模式一：商户后台根据微信支付规则链接生成二维码，用户扫码后请求微信支付，微信支付根据回调信息通知商户，商户生成订单，调用微信支付预支付，微信支付返回预支付信息，用户付款，微信支付将付款结果通知用户并根据回调异步通知商户，商户需返回消息确认。如果没有收到消息需调用查询订单api模式二：商户生成订单，调用下单api生成预支付url，将链接生成二维码，用户付款，微信支付将付款结果通知用户并根据回调异步通知商户，商户需返回消息确认。如果没有收到消息需调用查询订单api区别模式一是在用户扫码之后才生成订单并调用下单api，模式二在生成二维码的时候订单就存在了。因为预下单有效期最多为二小时，所以模式一有效期无限，模式二有效期二小时api标识return_code：通信成功标识result_code：交易成功标识当两者都成功的情况下为成功订单下单返回结果prepay_id：预支付会话标识，用于调用该订单的接口code_url：用户支付的接口，生成二维码转换短链接提高扫描速度查询需要transaction_id或者out_trade_notransaction_id在支付结果通知返回关闭订单需要out_trade_no关单最早能下单之后5分钟调用支付状态通知商户支付状态的通知回调是在下单时通过notify_url参数设定微信在没有收到商户的正确格式的成功消息，会定时通知  在接到通知后一定要签名验证，并且核定订单金额  一定要保证数据准确性，使用锁来控制并发退款需要证书注意：订单超过一年没法退款，一个订单可分多次退款，退款失败使用原退款单号继续重试，请求频率最高150QPS，单个订单退款次数不超过50需要transaction_id或者out_trade_no查询退款状态退款有延时，零钱20分钟之内，银行卡支付3天之内，所以需要查询退款状态查询条件四选一：transaction_id、out_trade_no、out_refund_no、refund_id当单笔订单退款超过10笔之后用transaction_id、out_trade_no查询只返回分页的10笔信息，如查询第10笔后数据需要offset参数获得offset后的10笔信息退款状态通知同支付状态通知需要注意的是，退款状态通知对重要数据加密，解密方法      对加密串A做base64解码，得到加密串B    对商户key做md5，得到32位小写key* ( key设置路径：微信商户平台(pay.weixin.qq.com)–&gt;账户设置–&gt;API安全–&gt;密钥设置 )    用key*对加密串B做AES-256-ECB解密（PKCS7Padding）  账单微信次日9点生成账单对账单通过日期下载对账单，可选下载格式资金账单需要证书通过日期下载资金账单，可选资金账单账户类型，可选下载格式订单评价拉取三个月内的订单评价指定开始时间与结束时间可分页，指定offset与limit其他验收验收公众号（WXPayAssist）只有验收通过之后开通支付权限才能正常使用，需要在仿真测试环境中使用真实商户号仿真测试环境与真实环境一样，只是路径携带前缀sandboxnew/最佳安全实践需要申请https跨城容灾主备切换，设置跨城主备服务，并设置主备域名。定时检测主链路连通状态，当出现较多请求超时、响应超时、5xx错误时，需要切换备用]]></content>
+      <categories>
+        
+          <category> 支付 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[随笔]]></title>
+      <url>/redis/2019/07/16/%E6%9D%82%E8%AE%B0/</url>
+      <content type="text"><![CDATA[公司业务需要一个频繁修改的计数器，如何保证事务并且计数器的原子性是比较难的地方redis操作原子性redis在单个操作时候是原子性，需要注意的是当命令变成两条之后不会再有原子性。但是redis有单命令操作，自增、自减等，可以通过单命令实现数据准确redis事务redis还可以事务控制需要注意：redis事务控制事务回滚，但是不具备原子性，只能保证命令都执行成功数据结构key-value的数据结构，value的格式可以有下面五种：string实现类似于java  arrayList，预分配冗余空间减少内存的频繁分配list负下标：负数下标，倒过来看SSL protocol error when attempting to connect with host “127.0.0.1”队列/堆栈：通过push/pop组合实现对应功能opsForList()rightPop：从右边插入rightPush：从右边拿取，会在队列中删掉拿出来的数据leftPop：同上leftPush：同上当进出相同时，效果类似于堆栈当进出不同时，效果类似于队列注意：索引：最左边的为0，最右边的索引可以为-1，最右边第二个可以为-2​    可以指定范围，找到长度，更新value，和java里面的容器一样hash在大小变化时可扩容和缩容set内部通过一个key相同的hash实现sortedsetMap&lt;String,Double&gt; 实现score权重，treeSet实现值常见错误Command timed out after no timeout  timeout时间太短ERR Client sent AUTH, but no password is set 密码没有设置（其实设了，但是不知道为什么没有生效）redis 磁盘在使用中 或被另一个进程锁定 redis设置了安全保护，不允许远程访问（需要修改默认设置）找不到类  因为是不同的两份代码，redis会认为是不同的类，然后会报classNotFindExpection错误相关知识点&amp; c的位运算符计算过程：  将&amp;前后的待运算变量转换为int  获得该int值的二进制  比较二进制，当前后当前位置都为1时，赋值为1,其他赋值为0  获得结果比如：8&amp;3  -&gt; 1000&amp;11 -&gt; 0jpa save与saveAndFlushjava注解标记注解用自身存在标记对象状态信息@Deprecated //接口已弃用元数据注解影响代码结构 使用@interface定义方法，方法里面可设置属性api网关网络攻击ssh暴力破解ssh为linux远程管理工具层次：应用层static 线程安全HashSet非线程安全如果要获得线程安全的set，需要使用：Collections.synchronizedSet(new HashSet());代码执行脚本木马rdp暴力破解SaaS私有部署坑：  二次开发  定制逻辑  运维多租户功能升级深拷贝&amp;浅拷贝  浅拷贝：        创建一个新对象，这个对象有着原始对象属性值的一份精确拷贝。如果属性是基本类型，拷贝的就是基本类型的值，如果属性是引用类型，拷贝的就是内存地址 ，所以如果其中一个对象改变了这个地址，就会影响到另一个对象。    深拷贝：        将一个对象从内存中完整的拷贝一份出来,从堆内存中开辟一个新的区域存放新对象,且修改新对象不会影响原对象  https://juejin.im/post/5d6aa4f96fb9a06b112ad5b1dubbo启动顺序Smb网络文件共享系统模板引擎1、 转义2、 格式化3、 简单逻辑斜杠与反斜杠在linux系统中:/：代表文件路径\：代表转义字符Window系统中：\：代表路径以及转义字符/：代表网络请求jpafetchType 与 fetchModeManyToMany oneToMany manyToOne数据库设计注意不要使用保留字和”is”;热部署与热加载Windows下jar包部署优化将进程变为服务运行删除服务：  打开cmd  输入 sc delete 服务名产品企业ERP产品（CRM、HER、SCM）原型图，理解业务（业务架构）产品管理后台面向消费者的产品后台使用角色：平台产品、运营、客服、开发等实现功能：平台数据统计、用户管理、数据管理、权限管理、平台型产品中枢，包括输入和输出dubbo测试dubbo://192.168.3.198:20880/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService:1.0.0:1&amp;bind.ip=192.168.3.198&amp;bind.port=20880&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;group=1&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=14020&amp;qos-enable=false&amp;register=true&amp;release=2.7.2&amp;revision=1.0.0&amp;side=provider&amp;timestamp=1561688025890&amp;version=1.0.0, dubbo version: 2.7.2, current host: 192.168.3.198injvm://127.0.0.1/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService&amp;bind.ip=192.168.3.198&amp;bind.port=20880&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=25936&amp;qos-enable=false&amp;register=true&amp;release=2.7.2&amp;side=provider&amp;timestamp=1561688751920, dubbo version: 2.7.2, current host: 192.168.3.198org.apache.dubbo.registry.RegistryService:20880in [com.thy.demo.service.DemoService:20880],may be version or group mismatch , channel: consumer: /192.168.3.198:7600–&gt; provider: /192.168.3.198:20880,message:RpcInvocation[methodName=subscribe, parameterTypes=[class org.apache.dubbo.common.URL, interface org.apache.dubbo.registry.NotifyListener],arguments=null,attachments={path=org.apache.dubbo.registry.RegistryService,sys_callback_arg-1=353580491,dubbo=2.0.2,interface=org.apache.dubbo.registry.RegistryService, version=0.0.0, timeout=10000}],dubbo version: 2.7.2, current host: 192.168.3.198register dubbo://192.168.3.198:20880/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=22324&amp;register=true&amp;release=2.7.2&amp;side=provider&amp;timestamp=1561692350792 to /224.5.6.7:1234, dubbo version: 2.7.2, current host: 192.168.3.198subscribe provider://192.168.3.198:20880/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService&amp;bind.ip=192.168.3.198&amp;bind.port=20880&amp;category=configurators&amp;check=false&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=22324&amp;qos-enable=false&amp;register=true&amp;release=2.7.2&amp;side=provider&amp;timestamp=1561692350792 to /224.5.6.7:1234, dubbo version: 2.7.2, current host: 192.168.3.198register consumer://192.168.3.198/com.thy.demo.service.DemoService?application=consumer-demo&amp;category=consumers&amp;check=false&amp;dubbo=2.0.2&amp;interface=com.thy.demo.service.DemoService&amp;lazy=false&amp;methods=getStudentById,helloDubbo&amp;pid=24420&amp;qos-enable=false&amp;release=2.7.2&amp;side=consumer&amp;sticky=false&amp;timestamp=1561692603151 from /127.0.0.1:1234, dubbo version: 2.7.2, current host: 192.168.3.198register dubbo://192.168.3.198:20880/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=22324&amp;register=true&amp;release=2.7.2&amp;side=provider&amp;timestamp=1561692350792 to 127.0.0.1:1234, dubbo version: 2.7.2, current host: 192.168.3.198register dubbo://192.168.3.198:20880/com.thy.demo.service.DemoService?anyhost=true&amp;application=provider-demo&amp;bean.name=ServiceBean:com.thy.demo.service.DemoService&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=true&amp;generic=false&amp;interface=com.thy.demo.service.DemoService&amp;methods=getStudentById,helloDubbo&amp;pid=22324&amp;register=true&amp;release=2.7.2&amp;side=provider&amp;timestamp=1561692350792 from /127.0.0.1:1234, dubbo version: 2.7.2, current host: 192.168.3.198]]></content>
+      <categories>
+        
+          <category> redis </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[docker]]></title>
+      <url>/docker/2019/06/03/docker/</url>
+      <content type="text"><![CDATA[优势      容器与虚拟机        应用程序自动部署到容器        建模速度快，逻辑分离        PaaS SaaS  组成  Client、daemon 守护进程          C/s架构 本地/远程        镜像  基石，只懂文件系统  Bootfs - &gt; rootfs - &gt; add emacs -&gt; add apache      分层储存，删除前一层只会改变这一层的状态，并且是假删除    容器          容器为进程，但是运行于特有的命名空间      分层储存      无状态（文件写入，使用数据卷）        仓库  公有  docker hub  私有安装  ce ee]]></content>
+      <categories>
+        
+          <category> docker </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[UML认识]]></title>
+      <url>/uml/2019/01/18/uml/</url>
+      <content type="text"><![CDATA[类图实现关系泛化关系组合关系聚合关系关联关系依赖关系时序图角色对象生命线控制焦点消息]]></content>
+      <categories>
+        
+          <category> UML </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[数据结构认识]]></title>
+      <url>/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/2018/09/29/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84/</url>
+      <content type="text"><![CDATA[抽象层数据结构层实现层数据数据元素数据结构逻辑结构线性结构非线性结构储存结构运算]]></content>
+      <categories>
+        
+          <category> 数据结构 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[java]]></title>
+      <url>/java/2018/09/25/java/</url>
+      <content type="text"><![CDATA[多线程线程停止线程优先级Join()主线程等待子线程结束再运行Synchronized：      对象锁        同步代码块  Volatilespringspring boot 2.0特性  响应式编程  http/2  kotlin  执行器架构  springmvc webFlux jersey  security线程安全​    Spring中的默认注入对象是单例对象，线程不安全，不注入对象中声明对象spring cloudZuul: router 统一访问接口Spring cloud netflixNetflix Eureka 服务中心Netfilx Hystrix 熔断器Netflix zuul 动态路由，边缘服务框架Netflix archaius 配置管理apiSpring cloud config 配置管理工具包Spring cloud bus 消息事件总线Spring cloud for cloud foundry​	PaaS：云服务Spring cloud cluster 集群基础功能支持Spring cloud consul 服务发现与配置工具Spring cloud security 基于spring securitySpring cloud sleuth 日志收集工具Spring cloud data flow 开发执行大范围数据处理其模式数据格式jsonfastJson将json转换为string传递（泛型）      传递对象：T t        发送方：    ​    JSON.toJSONString(t)        接收方：    ​    JSON.parseObject(message, new TypeReference(){});  ]]></content>
+      <categories>
+        
+          <category> java </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[网络协议]]></title>
+      <url>/%E7%BD%91%E7%BB%9C%E5%8D%8F%E8%AE%AE/2018/08/23/%E7%BD%91%E7%BB%9C%E5%8D%8F%E8%AE%AE/</url>
+      <content type="text"><![CDATA[网络协议数据单元（pud）Nfc短距离通信技术13.56 MHz蓝牙2.4-2.5 GHzPan个人局域网络局域网LAN以太网LAN​    当IP报文的发送方和接收方位于同一网络，数据链路帧直接发送到接收设备。以太网上数据链路地址就是以太网MAC地址。MAC地址是物理植入网卡的48比特地址以太网：2.4GHz 和5.8GHz​    令牌环​    光纤分布式数据接口无线局域网（WLAN）无线局域网（WLAN）2.4GHz 5GHz​    WiFi：2.4GHz 5GHz​    ZigBee：2.4GHz 868/915MHz​    Mmds：2.5GHz至2.7GHz虚拟局域网（VLAN）储存储存区域网络（san）连接外接储存设备和服务器的架构，被操作系统视为直接连接的储存设备 远程储存设备：nfs、smb、cifsFc-san光纤通讯技术(FCP)      Scsi是光纤通道的上层        主要通过fc-2传输    数据通道：帧          光纤通道只使用一个帧格式在多个层完成任务      帧的功能决定格式      Sof -&gt;帧头 -&gt; 内容 -&gt; eof  (可以被TCP等承载)            拓扑结构    寻址方式          World wide name (WWN)      Fabric        流量控制          信用度(credit)      端到端(EE-credit)，节点本身检测，交换机不参与      缓冲区到缓冲区(BB-credit)，交换机参与                  Receive-ready 补充信用度                      发现机制          通知管理者，然后告知同分区其他设备，最后通知其他分区        端口和动态地址          Tx rx      FCID地址通讯(动态地址，访问迅速)      ​Ip-san搭建储存（磁盘阵列）+ 交换机 +虚拟储存管理器Iscsi协议​             流量控制与超时重发        速率：传送路径上交换机、路由器和接收方可用的缓冲区大小的函数        Karm算法(rtt算法复杂)    发现机制  静态配置(比较小的iscsi体系)  SendTarget(网关，静态配置到指定设备，发送sendTarget给网关设备，网关设备返回目标端的信息，然后发起端建立目标端的对话)  零配置 slp，目标端在slp注册共享磁盘文件系统GpfsHdfsLustreGpfsCephglusterFS 以太网 infiniband RDMALUN：逻辑单元号广域网（wan）节点功能关系分类：PPP星型网应用层：http-&gt; 传输层：tcp分段-&gt; 网络层：ip报文-&gt; 接入层：帧头、帧 -&gt;介质：比特编码网络地址：网络前缀和主机Mac、ip物理和逻辑地址Arp（address resolution protocol）协议：广播ARP请求，包含ip地址，符合条件发送ARP响应默认网关（路由）：路由器的接口ip地址每台计算机都可以配置自己的默认网关地址，如果配置了错误的则无法送达交换机Ingress：帧通过特定端口进入设备Egress：帧通过特定端口离开设备直通转发模式储存转发模式下：适用于大型局域网1、 差错控制2、 自动缓存无碎片转发冲突域交换机每一个端口为一个网段，代表一个冲突域，冲突域内冲突不影响其他网段，为微网段广播域互联的交换机二层广播包（Mac广播包）：MAC广播域包含LAN上所有接收到广播帧的设备。广播通信比较多时，可能会带来广播风暴。特别是在包含不同速率的网段，高速网段产生的广播流量可能导致低速网段严重拥挤，乃至崩溃。VLAN逻辑端口、独立的三层网络拓扑结构Trunk两个网络设备之间承载多于一种VLAN的端到端的连接路由器报文转发输出链路将报文封装在适当的数据链路帧通过ARP协议发送请求进行传输路由表储存在ram中的数据文件直连路由远端路由路由表内容：1、 本地路径接口2、 直连接口3、 静态路径4、 动态路由协议标识：L：路由器接口地址。当路由器接收到报文时发送至本地接口而无需转发。C：直连网段。O：通过OSPF从另一个路由器动态学习到的网络。D：通过EIGRP从另一个路由器动态学习到的网络。静态路由与动态路由NAT静态nat：一到一的永久映射动态nat：将一个未登记的IP地址映射到一个登记的IP地址池中端口nat：本地地址：内部本地地址实际上是尝试访问Internet的发送主机的私有地址。外部本地地址通常是连接到用户ISP的路由器接口，也是报文开始传输的公有地址Nat实现方式：1、 一个主机对应一个ip2、 多个主机对应一个ipIcmp网络控制消息协议，主要用于传递查询报文与差错报文arp提问和回复的协议链路聚合交换机链路聚合方式：EtherChannel，通过PAgP与LACP配置协商一对一的关系一个逻辑链路的速度等于所有物理链路的总和，但是不是所有的情况都是这样，只有特定的链路和特定的报文才可以实现hash算法，确定性的算法，同样的地址和会话会找到同一个接口1、0-7值，实现负载均衡2、算法可以根据目的地和源的端口、ip、Mac确定3、在同一EtherChannel使用的是同一方法确定，不同的EtherChannel可以使用不同方法Ip地址与子网Ip：网络ID 子网ID 主机IDIp地址长度：32位A类子网掩码：8位A类子网掩码：16位C类子网掩码：24位子网掩码：区分子网ID与主机IDtcpTcp滑动窗口1、 可靠2、 数据流控，避免过载数据确认：将数据流划分为片段，使用sequence number确认最后一个字段TCP 状态：  已发送已确认  已发送未确认  未发送而接收方ready  未发送而接收方not ready窗口2和3合起来就是窗口大小可用窗口：3的大小TCP重传重传计时器重传队列：发送时开始计时，计时结束时重传超时再次发送，确认之后删除自适应重传：动态调整值仅重传超时片段重传所有片段选择确认（SACK）TCP窗口调整与流控确认传输流控：调整窗口大小，在接收到字节数据之后和确认消息一起返回关闭窗口Linux网络配置Ifconfig: 配置网络接口​	Family：配置网络协议​	Address：指定接口的ip地址 up/down​	Netmask：子网掩码​	Broadcast：接口指定ip广播地址Route：配置静态路由，路由表永远不改，可使用命令修改路由表Ubuntu 网络配置/etc/hostname 主机名/etc/network/interfaces 网络配置/etc/network/optionsAddress：ip地址Netmask：网络掩码Geteway：默认路由Ifup和ifdown命令调用SUSE网络配置/etc/sysconfig/network/etc/sysconfig/network-scripts/ifcfg-ifname/etc/sysconfig/static-routes 静态路由Ifcfg-interfaceIfroute-interface，内容格式与routes相同Red Hat网络配置System-config-network网络硬件选项Ethtool 变更是暂时的Linux TCP/IP 路径/proc/sys/net/ipv4诊断工具ping1、 是否有连接2、 连接质量如何Echo_requestEcho_replyIcmp destination_host_unreachable 未找到路径Destination Host Unreachable Destination Network Unreachable  运行ping命令错误Destination Host Unreachable 转发报文设备错误Ping-c +数量 发送指定数量报文-f 选项表明报文发送速率与接收主机能够处理速率相同-l 用于计数，尽可能快的发送该数量报文，然后恢复正常-i 两个连续报文之间指定等待秒数网络性能监测Ping 4次Pathchar （pchar）http客户端：请求服务端：响应超文本文件以及其他文件的传输CDN：内容分发网络内容储存技术：das（直连附加储存）、nas（网络附加储存）、san（储存区域网）状态码：      1xx：指示信息——表示请求已经接受，继续处理        2xx：成功——表示请求已经被成功接收、理解、接受        3xx：重定向——要完成请求必须进行更进一步的操作        4xx：客户端错误——请求有语法错误或请求无法实现        5xx：服务器端错误——服务器未能实现合法的请求  五层协议网络层实现寻址：逻辑地址（ip）交换：路由算法：连接服务：传输层连接OSI上下层之间的接口和桥梁传输连接管理处理传输差错监控服务质量会话层半双工、单工、双全工表示层数据处理：格式、编码、压缩、加密应用层html渲染在访问网址的时候，我们是携带域名信息先访问dns服务器获得域名ip，然后拿到域名ip访问服务获得报文Html/ Svg/ xhtml  dom tree  =&gt;   Rendering treeCss      	 css rule tree​		 =&gt;Js      		dom api (dom tree)  cssom api (css rule tree)socketsocket是一种”打开—读/写—关闭”模式的实现，服务器和客户端各自维护一个”文件”第一次握手：syn包第二次握手：syn+ack第三次握手：ack指定的地址族、数据类型和协议来分配一个socket的描述字及其所用的资源。domain:协议族，常用的有AF_INET、AF_INET6、AF_LOCAL、AF_ROUTE其中AF_INET代表使用ipv4地址type:socket类型，常用的socket类型有，SOCK_STREAM、SOCK_DGRAM、SOCK_RAW、SOCK_PACKET、SOCK_SEQPACKET等protocol:协议。常用的协议有，IPPROTO_TCP、IPPTOTO_UDP、IPPROTO_SCTP、IPPROTO_TIPC等sockfd:socket描述字，也就是socket引用addr:要绑定给sockfd的协议地址addrlen:地址的长度监听socketsockfd:要监听的socket描述字backlog:相应socket可以排队的最大连接个数连接某个socketsockfd:客户端的socket描述字addr:服务器的socket地址addrlen:socket地址的长度读取socket内容fd:socket描述字buf：缓冲区count：缓冲区长度向socket写入内容，其实就是发送内容fd:socket描述字buf：缓冲区count：缓冲区长度Socketio与socketsocket.io 是一个为实时应用提供跨平台实时通信的库。socket.io 的名字源于它使用了浏览器支持并采用的 HTML5 WebSocket 标准，因为并不是所有的浏览器都支持 WebSocket ，所以该库支持一系列降级功能：  Websocket  Adobe® Flash® Socket  AJAX long polling  AJAX multipart streaming  Forever Iframe  JSONP PollingSocket是一套api，目的是为了方便的使用tcp/udp，不是一套协议；WebSocket 则不同，它是一个完整的 应用层协议，包含一套标准的 API ；socketio使用websocket的库;Wireshark步骤      确认服务器和应用程序正在运行。        确认客户端正在运行，IP地址已配置（手动或通过DHCP），并连接至网络。        Ping服务器并确认连接正常。        在某些情况下，ping不通服务器但连接正常。这是由于防火墙拦截了ICMP信息，所以如果无法ping通并不一定表示连接有问题。防火墙可能是网络中的专用设备或Windows/Linux/UNIX终端设备上安装的防火墙。        抓包文件中，查找以下模式：        三重SYN信息而没有响应（见以下截屏）        SYN信息带一个reset(RST)响应  注：SYN：TCP/IP建立连接时使用的握手信号RST：TCP复位，关闭异常的连接DHCP 动态主机设置协议4步转发]]></content>
+      <categories>
+        
+          <category> 网络协议 </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[socket.io多路复用测试]]></title>
+      <url>/nio/2018/08/20/nio/</url>
+      <content type="text"><![CDATA[NIO：io多路复用Netty：对java nio的封装rabbitMQAdvanced Message Queuing Protocol (AMQP) 高级消息队列协议ErlangExchange:Direct Exchangesocket io多用户多事件测试使用socket io 多种情况的测试demo1 serverN client不变量：服务端响应时间为10秒，模拟网络堵塞的情况目的：1 测试多事件与单事件在处理效率上面的区别2 是否会有消息丢失的情况单客户端相同事件多次Server// 添加事件监听        server.addEventListener("hello", String.class, new  DataListener&lt;String&gt;() {          @Override              public void onData(SocketIOClient socketIOClient, String message,                  AckRequest  ackRequest)throws Exception {                  log.info("收到客户端消息：" + message);                   Thread.sleep(10000); //返回消息滞后10s                  ackRequest.sendAckData(message+"   receive");              }        });        server.start();  Client发送消息并接受回调，核对回调的总数  public void test(String message){      socket.emit("hello", message , new Ack() {                    @Override                    public void call(Object... objects) {                       b++;                        log.info("count :  "+b);                          log.info(objects[0].toString());                    }              });      }  现象服务端log  10:58:54.952  [nioEventLoopGroup-3-2] INFO Server - 收到客户端消息：test10  0  10:59:04.965 [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding  WebSocket Frame opCode=1 length=24  10:59:04.965  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding  WebSocket Frame opCode=1  10:59:04.965  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding  WebSocket Frame length=22  10:59:04.965  [nioEventLoopGroup-3-2] INFO Server - 收到客户端消息：test3  0  10:59:14.971  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding  WebSocket Frame opCode=1 length=23  10:59:14.971  [nioEventLoopGroup-3-2] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder  - Decoding WebSocket Frame opCode=1  10:59:14.971  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding  WebSocket Frame length=22  10:59:14.971 [nioEventLoopGroup-3-2]  INFO Server - 收到客户端消息：test3 1  10:59:24.977  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding  WebSocket Frame opCode=1 length=23  10:59:24.977  [nioEventLoopGroup-3-2] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder  - Decoding WebSocket Frame opCode=1  10:59:24.977  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding  WebSocket Frame length=22  10:59:24.977  [nioEventLoopGroup-3-2] INFO Server - 收到客户端消息：test3  2  10:59:34.979  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding  WebSocket Frame opCode=1 length=23  10:59:34.979  [nioEventLoopGroup-3-2] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder  - Decoding WebSocket Frame opCode=1  10:59:34.979  [nioEventLoopGroup-3-2] DEBUG  io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding  WebSocket Frame length=22  10:59:34.979  [nioEventLoopGroup-3-2] INFO Server - 收到客户端消息：test3  3  ……结论  服务端出现延时的排队状态，在多客户端几乎同时发送多条消息的情况下，服务端接收消息是在上一个任务结束之后才处理同一个事件的其他任务，出现了顺序排队的状况  没有出现请求丢失的情况  11:57:12.445 [EventThread] INFO Client - count : 200  11:57:12.445 [EventThread] INFO Client - test8 19 receive多客户端相同事件多次10个客户端，每个客户端发送10次请求到一个事件客户端与服务端同测试一public static void main(String[] args) {        for (int a=1;a&lt;11;a++){            int finalA = a;            scheduledExecutorService.execute(()-&gt;{                Client client = new Client();                client.startClient();                for (int i=0;i&lt;20;i++){                    client.test("test"+ finalA +" "+i);                }            });        }    }现象Server log  12:04:25.281 [nioEventLoopGroup-3-14] INFO Server - Server 服务端启动成功  12:04:33.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding WebSocket Frame opCode=1 length=24  12:04:33.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame opCode=1  12:04:33.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame length=23  12:04:33.643 [nioEventLoopGroup-3-15] INFO Server - 收到客户端消息：test4 5  12:04:35.286 [nioEventLoopGroup-3-16] ERROR com.corundumstudio.socketio.transport.PollingTransport - 58534e26-04be-4387-a239-47b1dbde1c73 is not registered. Closing connection  12:04:35.296 [nioEventLoopGroup-3-17] ERROR com.corundumstudio.socketio.transport.PollingTransport - 802f8e65-6d39-4ac0-a42b-d9478506a5d7 is not registered. Closing connection  12:04:35.296 [nioEventLoopGroup-3-18] ERROR com.corundumstudio.socketio.transport.PollingTransport - 58534e26-04be-4387-a239-47b1dbde1c73 is not registered. Closing connection  12:04:35.306 [nioEventLoopGroup-3-19] ERROR com.corundumstudio.socketio.transport.PollingTransport - 802f8e65-6d39-4ac0-a42b-d9478506a5d7 is not registered. Closing connection  12:04:35.306 [nioEventLoopGroup-3-20] DEBUG com.corundumstudio.socketio.handler.AuthorizeHandler - Handshake authorized for sessionId: 3dce699c-1750-419e-ab78-f4aa0ecdd174, query params: {EIO=[3], transport=[polling]} headers: {Connection=[Keep-Alive], User-Agent=[okhttp/3.8.1], content-length=[0], Host=[127.0.0.1:9010], Accept-Encoding=[gzip], Accept=[/]}  12:04:35.306 [nioEventLoopGroup-3-20] DEBUG com.corundumstudio.socketio.handler.ClientHead - binding channel: [id: 0x84fe29cd, L:/127.0.0.1:9010 - R:/127.0.0.1:58357] to transport: POLLING  12:04:35.316 [nioEventLoopGroup-3-20] INFO Server - Server 服务端启动成功  12:04:35.326 [nioEventLoopGroup-3-21] DEBUG com.corundumstudio.socketio.handler.AuthorizeHandler - Handshake authorized for sessionId: ef121eff-28cd-4afe-b1a2-e1da5e5e4296, query params: {EIO=[3], transport=[polling]} headers: {Connection=[Keep-Alive], User-Agent=[okhttp/3.8.1], content-length=[0], Host=[127.0.0.1:9010], Accept-Encoding=[gzip], Accept=[/]}  12:04:35.326 [nioEventLoopGroup-3-21] DEBUG com.corundumstudio.socketio.handler.ClientHead - binding channel: [id: 0xb312eef3, L:/127.0.0.1:9010 - R:/127.0.0.1:58358] to transport: POLLING  12:04:35.326 [nioEventLoopGroup-3-21] INFO Server - Server 服务端启动成功  12:04:35.336 [nioEventLoopGroup-3-22] DEBUG com.corundumstudio.socketio.handler.AuthorizeHandler - Handshake authorized for sessionId: 2057bf24-a2ea-482f-9270-4ffb22341d4c, query params: {EIO=[3], transport=[polling]} headers: {Connection=[Keep-Alive], User-Agent=[okhttp/3.8.1], content-length=[0], Host=[127.0.0.1:9010], Accept-Encoding=[gzip], Accept=[/]}  12:04:35.336 [nioEventLoopGroup-3-22] DEBUG com.corundumstudio.socketio.handler.ClientHead - binding channel: [id: 0x4c6f9e0b, L:/127.0.0.1:9010 - R:/127.0.0.1:58359] to transport: POLLING  12:04:35.336 [nioEventLoopGroup-3-22] INFO Server - Server 服务端启动成功  12:04:35.336 [nioEventLoopGroup-3-23] DEBUG com.corundumstudio.socketio.handler.AuthorizeHandler - Handshake authorized for sessionId: b18ea7ab-dc3d-4c9b-a754-b44b151ad1cc, query params: {EIO=[3], transport=[polling]} headers: {Connection=[Keep-Alive], User-Agent=[okhttp/3.8.1], content-length=[0], Host=[127.0.0.1:9010], Accept-Encoding=[gzip], Accept=[/]}  12:04:35.336 [nioEventLoopGroup-3-23] DEBUG com.corundumstudio.socketio.handler.ClientHead - binding channel: [id: 0x0ea29dce, L:/127.0.0.1:9010 - R:/127.0.0.1:58360] to transport: POLLING  12:04:35.346 [nioEventLoopGroup-3-23] INFO Server - Server 服务端启动成功  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker - [id: 0x5e1f78df, L:/127.0.0.1:9010 - R:/127.0.0.1:58361] WebSocket version V13 server handshake  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker - WebSocket version 13 server handshake key: NDXXq63ZhsmuTCDDk1oCvg==, response: qWgvITpkvq9HUtX08Pn9q5P/d6U=  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG com.corundumstudio.socketio.handler.ClientHead - binding channel: [id: 0x5e1f78df, L:/127.0.0.1:9010 - R:/127.0.0.1:58361] to transport: WEBSOCKET  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG com.corundumstudio.socketio.transport.WebSocketTransport - сlient 3dce699c-1750-419e-ab78-f4aa0ecdd174 handshake completed  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame opCode=1  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame length=6  12:04:35.346 [nioEventLoopGroup-3-24] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding WebSocket Frame opCode=1 length=6  12:04:39.241 [nioEventLoopGroup-3-38] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame opCode=1  12:04:39.241 [nioEventLoopGroup-3-38] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame length=1  12:04:39.241 [nioEventLoopGroup-3-38] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding WebSocket Frame opCode=1 length=1  12:04:43.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameEncoder - Encoding WebSocket Frame opCode=1 length=24  12:04:43.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame opCode=1  12:04:43.643 [nioEventLoopGroup-3-15] DEBUG io.netty.handler.codec.http.websocketx.WebSocket08FrameDecoder - Decoding WebSocket Frame length=23  12:04:43.644 [nioEventLoopGroup-3-15] INFO Server - 收到客户端消息：         test2 1  …结论      socketio  server与client长连接出现断连，在没有发送消息的情况下会有同样的问题        同样会出现消息排队  对照组将服务端响应延迟时间由10s 改为 1s 以及及时返回 是否还会出现断连的情况过程略结果与10s延迟的情况类似CallBack 与 socketIOClient.sendEvent 的相互影响public static void main(String[] args) {        //单客户端 callback与 send client event 测试        Client client = new Client();        client.startClient();        for (int i=0;i&lt;10;i++){            client.test("test1" +" "+i);        }    }现象  14:49:50.842 [EventThread] INFO Client - count : 1  14:49:50.842 [EventThread] INFO Client - test1 0 callback  14:49:51.847 [EventThread] INFO Client - count : 1  14:49:51.847 [EventThread] INFO Client - test1 0 receive  14:49:51.847 [EventThread] INFO Client - count : 2  14:49:51.847 [EventThread] INFO Client - test1 1 callback  14:49:52.847 [EventThread] INFO Client - count : 2  14:49:52.847 [EventThread] INFO Client - test1 1 receive  14:49:52.847 [EventThread] INFO Client - count : 3  14:49:52.847 [EventThread] INFO Client - test1 2 callback  14:49:53.847 [EventThread] INFO Client - count : 3  14:49:53.847 [EventThread] INFO Client - test1 2 receive  14:49:53.847 [EventThread] INFO Client - count : 4  14:49:53.847 [EventThread] INFO Client - test1 3 callback  14:49:54.853 [EventThread] INFO Client - count : 4  14:49:54.853 [EventThread] INFO Client - test1 3 receive  14:49:54.853 [EventThread] INFO Client - count : 5  14:49:54.853 [EventThread] INFO Client - test1 4 callback  14:49:55.853 [EventThread] INFO Client - count : 5  14:49:55.853 [EventThread] INFO Client - test1 4 receive  14:49:55.853 [EventThread] INFO Client - count : 6  14:49:55.853 [EventThread] INFO Client - test1 5 callback  14:49:56.855 [EventThread] INFO Client - count : 6  14:49:56.855 [EventThread] INFO Client - test1 5 receive  14:49:56.855 [EventThread] INFO Client - count : 7  14:49:56.855 [EventThread] INFO Client - test1 6 callback  14:49:57.861 [EventThread] INFO Client - count : 7  14:49:57.861 [EventThread] INFO Client - test1 6 receive  14:49:57.861 [EventThread] INFO Client - count : 8  14:49:57.861 [EventThread] INFO Client - test1 7 callback  14:49:58.867 [EventThread] INFO Client - count : 8  14:49:58.867 [EventThread] INFO Client - test1 7 receive  14:49:58.867 [EventThread] INFO Client - count : 9  14:49:58.867 [EventThread] INFO Client - test1 8 callback  14:49:59.875 [EventThread] INFO Client - count : 9  14:49:59.875 [EventThread] INFO Client - test1 8 receive  14:49:59.875 [EventThread] INFO Client - count : 10  14:49:59.875 [EventThread] INFO Client - test1 9 callback  14:50:00.876 [EventThread] INFO Client - count : 10  14:50:00.876 [EventThread] INFO Client - test1 9 receive结论  同样出现排队，并且下一次消息是在这次event  callback返回还没有结束。  必须是这个event函数跑完才会第二次调用事件函数现象：1、同样出现排队，并且下一次消息是在这次event  callback返回还没有结束。必须是这个event函数跑完才会第二次调用这个函数单客户端多个事件多次通信public static void main(String[] args) {        //多事件 callback测试        Client client = new Client();        client.startClient();        for (int i = 0; i &lt; 10; i++) {            client.test1("test " + i);            client.test2("test " + i);        }    }现象  15:13:38.908 [EventThread] INFO Client - client 连接服务端成功  15:13:48.971 [EventThread] INFO Client - 1 count : 1  15:13:48.971 [EventThread] INFO Client - test 0 callback 1  15:13:58.976 [EventThread] INFO Client - 2 count : 1  15:13:58.976 [EventThread] INFO Client - test 0 callback 2  15:14:08.985 [EventThread] INFO Client - 1 count : 2  15:14:08.985 [EventThread] INFO Client - test 1 callback 1  15:14:18.988 [EventThread] INFO Client - 2 count : 2  15:14:18.988 [EventThread] INFO Client - test 1 callback  2  15:14:28.996 [EventThread] INFO Client - 1 count : 3  15:14:28.996 [EventThread] INFO Client - test 2 callback 1  15:14:38.998 [EventThread] INFO Client - 2 count : 3  15:14:38.998 [EventThread] INFO Client - test 2 callback 2  15:14:49.004 [EventThread] INFO Client - 1 count : 4  15:14:49.004 [EventThread] INFO Client - test 3 callback 1  15:14:59.007 [EventThread] INFO Client - 2 count : 4  15:14:59.007 [EventThread] INFO Client - test 3 callback 2结论多个event之间也会排队多客户端 相同event多次  //单事件多客户端 callback测试        Client client = new Client();        client.startClient();        for (int i = 0; i &lt; 10; i++) {            client.test1("test1 " + i);//            client.test2("test " + i);        }        Client client1 = new Client();        client1.startClient();        for (int i = 0; i &lt; 10; i++) {            client1.test1("test2 " + i);//            client.test2("test " + i);        }现象：  15:27:35.900 [EventThread] INFO Client - client 连接服务端成功  15:27:35.910 [EventThread] INFO Client - client 连接服务端成功  15:27:45.923 [EventThread] INFO Client - 1 count : 1  15:27:45.923 [EventThread] INFO Client - test1 0 callback 1  15:27:45.923 [EventThread] INFO Client - 1 count : 2  15:27:45.923 [EventThread] INFO Client - test2 0 callback 1  15:27:55.929 [EventThread] INFO Client - 1 count : 3  15:27:55.929 [EventThread] INFO Client - test1 1 callback 1  15:27:55.929 [EventThread] INFO Client - 1 count : 4  15:27:55.929 [EventThread] INFO Client - test2 1 callback 1  15:28:05.936 [EventThread] INFO Client - 1 count : 5  15:28:05.936 [EventThread] INFO Client - test2 2 callback 1  15:28:05.936 [EventThread] INFO Client - 1 count : 6  15:28:05.936 [EventThread] INFO Client - test1 2 callback 1  15:28:15.937 [EventThread] INFO Client - 1 count : 7  15:28:15.937 [EventThread] INFO Client - test2 3 callback 1  15:28:15.937 [EventThread] INFO Client - 1 count : 8  15:28:15.937 [EventThread] INFO Client - test1 3 callback 1  15:28:25.942 [EventThread] INFO Client - 1 count : 9  15:28:25.942 [EventThread] INFO Client - test2 4 callback 1结论  不同客户端之间相同事件没有相互等待，同一个连接的请求还在等待总结      连接的客户端越少越稳定        Ping timeout的时间由服务端确定,socket io之间会有ping的机制，但是如果event事件阻塞超过timeout事件，会导致长连接断开，并且在断开之前发送但是阻塞的事件会丢掉    同一个客户端：          同一个event会排队      不同event也会一起排队        不同客户端：          同一个event也不会排队      ]]></content>
+      <categories>
+        
+          <category> nio </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
+    <entry>
+      <title><![CDATA[linux挂载]]></title>
+      <url>/linux/2018/08/16/Linux%E6%8C%82%E8%BD%BD/</url>
+      <content type="text"><![CDATA[Linux挂载没有权限      首先确保 windows下面的共享目录开了用户的读写权限        在挂载命令中要加 dir_mode=0777,file_mode=0777,  完整的语法：$ mount -t cifs -o user=windows_user,password=1234456,iocharset=utf8,dir_mode=0777,file_mode=0777,codepage=cp936 //192.168.1.1/windows_dir  /webser/mnt/linux_dis删除挂载：$ umount /webser/mnt/linux_dis报错  mount: wrong fs type, bad option, bad superblock on //fangyudata/FangYu,  ​    missing codepage or helper program, or other error  ​    (for several filesystems (e.g. nfs, cifs) you might  ​    need a /sbin/mount. helper program)  ​    In some cases useful info is found in syslog - try                    ​    dmesg        tail or so.            解决方法：安装nfs-utils 即可：从上面这段错误信息中，我们发现失败的原因是缺少mount.cifs 应用程序。经过google搜索发现mount.cifs是cifs-utils包中。我们需要先安装cifs-utils$ sudo apt-get install cifs-utils报错：  没有已启用的仓库。  执行 “yum repolist all” 查看您拥有的仓库。  您可以用 yum-config-manager –enable &lt;仓库名&gt; 来启用仓库解决方法：ubuntu默认软件包管理器不是yum，而是dpkg，安装软件时用 apt-get 来替换 yum 安装，一键安装宝塔BT面板代码修改为下面的即可。$ sudo apt-get install -y wget &amp;&amp; sudo wget -O install.sh http://125.88.182.172:5880/install/install.sh &amp;&amp; sudo sh install.sh修改后挂载命令：$ mount -t cifs -o username=tianhongyan,password=hongyantian,gid=0,uid=0 //192.168.3.250/FangYu /mnt/fangyudata/失败$ mount -t cifs -o user=tianhongyan,password=hongyantian,iocharset=utf8,dir_mode=0777,file_mode=0777,codepage=cp936 //192.168.3.250/FangYu  /mnt/fangyudata/失败  mount error(22): Invalid argument  Refer to the mount.cifs(8) manual page (e.g. man mount.cifs)$ sudo mount -t cifs //192.168.3.250/FangYu /mnt/fangyudata -o iocharset=utf8,rw,uid=0,gid=0,file_mode=0777,dir_mode=0777失败需要root的密码$ mount -t cifs -o username=tianhongyan,password=hongyantian,file_mode=0777,dir_mode=0777,gid=0,uid=0 //192.168.3.250/FangYu /mnt/fangyudata/$ mount -t cifs -o username=tianhongyan,password=hongyantian,file_mode=0777,dir_mode=0777,gid=0,uid=0 //192.168.3.253/Fangyu_Original /mnt/Fangyu_Original/$ mount -t cifs -o username=zhoufoling,password=folingzhou25,file_mode=0777,dir_mode=0777,gid=0,uid=0 //192.168.3.250/Fangyu_Original /mnt/Fangyu_Original/$ mount -t cifs -o username=fangyuzhangliang,password=zhangliangfangyu,file_mode=0777,dir_mode=0777,gid=0,uid=0 // 192.168.3.125/FangyuData /mnt/ FangyuData/其他报错0.0.0.0可以外网通信127.0.0.1只能内网通信Git:  error: Pulling is not possible because you have unmerged files.解决办法：git add –u  fatal: refusing to merge unrelated histories解决办法：–allow-unrelated-histories]]></content>
+      <categories>
+        
+          <category> linux </category>
+        
+      </categories>
+      <tags>
+        
+          <tag> 学习 </tag>
+        
+      </tags>
+      <tags></tags>
+    </entry>
+  
 </search>

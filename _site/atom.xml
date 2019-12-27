@@ -1,1 +1,594 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.5.2">Jekyll</generator><link href="http://localhost:4000/atom.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2018-08-23T00:51:48+08:00</updated><id>http://localhost:4000/</id><title type="html">floatthy</title><subtitle>blog</subtitle><author><name>thy</name></author></feed>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.5">Jekyll</generator><link href="http://localhost:4000/atom.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2019-12-27T01:05:02+08:00</updated><id>http://localhost:4000/atom.xml</id><title type="html">小站</title><subtitle>follow your heart</subtitle><author><name>floatthy</name></author><entry><title type="html">超长事务</title><link href="http://localhost:4000/%E4%BA%8B%E5%8A%A1/2019/12/25/transaction/" rel="alternate" type="text/html" title="超长事务" /><published>2019-12-25T00:00:00+08:00</published><updated>2019-12-25T00:00:00+08:00</updated><id>http://localhost:4000/%E4%BA%8B%E5%8A%A1/2019/12/25/transaction</id><content type="html" xml:base="http://localhost:4000/%E4%BA%8B%E5%8A%A1/2019/12/25/transaction/">&lt;p&gt;java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms&lt;/p&gt;
+
+&lt;p&gt;数据库连接超时，需要查看哪个连接部分事务没有停止&lt;/p&gt;
+
+&lt;p&gt;Lock wait timeout exceeded; try restarting transaction&lt;/p&gt;
+
+&lt;h2 id=&quot;mysql慢日志查询&quot;&gt;mysql慢日志查询&lt;/h2&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;慢日志开启&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mysql&quot;&gt;#查看是否开启
+show variables like '%slow_query_log%';
+
+#开启
+set global slow_query_log = 1;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;开启之后查看获得慢日志文件路径&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-12-25/image-20191225160802348.png&quot; alt=&quot;image-20191225160802348&quot; /&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;慢日志过期时间修改&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;div class=&quot;language-sql highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;#&lt;/span&gt; &lt;span class=&quot;err&quot;&gt;查看过期时间&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;show&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;variables&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;like&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'long_query_time'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;因为是在测试环境，所以直接修改配置文件内容&lt;/p&gt;
+
+&lt;div class=&quot;language-ini highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;py&quot;&gt;slow_query_log_file&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;/slow.log&lt;/span&gt;
+&lt;span class=&quot;py&quot;&gt;long_query_time&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;1&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;修改慢日志的路径，并且配置需要记录的过期时间&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;查看打印的慢日志&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;打印发现没有查询很慢的语句，于是需要排查没有结束的事务&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mysql&quot;&gt;select * from sys.processlist
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-12-25/image-20191226161950639.png&quot; alt=&quot;image-20191226161950639&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;里面有几个比较重要的字段
+里面有几个比较重要的字段&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;db&lt;/code&gt;  线程的默认数据库&lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;command&lt;/code&gt;  对于前台线程，线程正在代表 client 执行的命令类型，如果 session 是 idle 则为&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Sleep&lt;/code&gt;&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;last_statement&lt;/code&gt;  如果当前没有执行语句或等待，则由线程执行的最后一个语句&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;last_statement_latency&lt;/code&gt;  How long the last statement executed&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;可以看出确实有部分语句事务执行时间过长&lt;/p&gt;
+
+&lt;p&gt;select taskdetail0&lt;em&gt;.id as id1&lt;/em&gt; … uid=157734172287109 for update&lt;/p&gt;
+
+&lt;p&gt;select taskdetail0&lt;em&gt;.id as id1&lt;/em&gt; … uid=157734176692108 for update&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-mysql&quot;&gt;select * from performance_schema.events_statements_current
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;查到最后执行的查询语句&lt;/p&gt;
+
+&lt;p&gt;由查到的查询语句找到了超长事务的语句，我这里结果就不展示了。&lt;/p&gt;
+
+&lt;p&gt;观察代码发现，事务本身不会出现死锁的情况，因为是删除操作不存在需要数据一致的情况只需要查询存在然后删除就可以了，存在表锁的表已经加了悲观锁，然后没有表锁的语句的查询语句放置在事务之外，所以不会是进入死锁，查看打印的语句也没有发现死锁。&lt;/p&gt;
+
+&lt;p&gt;最后回到超长事务这里，发现在事务里面我有做一个从oss删除的操作。。。问题就在这里吧，删除操作需要数秒，从而导致在并发情况下事务一直不能提交从而会有各种timeout。问题解决&lt;/p&gt;</content><author><name>floatthy</name></author><category term="日常" /><summary type="html">java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms</summary></entry><entry><title type="html">今天的测试bug</title><link href="http://localhost:4000/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/2019/12/17/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95bug/" rel="alternate" type="text/html" title="今天的测试bug" /><published>2019-12-17T00:00:00+08:00</published><updated>2019-12-17T00:00:00+08:00</updated><id>http://localhost:4000/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/2019/12/17/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95bug</id><content type="html" xml:base="http://localhost:4000/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95/2019/12/17/%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95bug/">&lt;h2 id=&quot;远程调用异常&quot;&gt;远程调用异常&lt;/h2&gt;
+
+&lt;p&gt;2019-12-16 16:49:50.706 nacos [http-nio-8062-exec-21] ERROR c.f.s.c.InterfaceRequestErrrorAndPerformanceLog - RuntimeException{方法：Result com.fy.server.controller.SliceController.deleteSlice(Long)， 参数：[157648617865460],异常：Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;amp;application=fy-server&amp;amp;bean.name=ServiceBean:sliceService&amp;amp;category=providers&amp;amp;check=false&amp;amp;deprecated=false&amp;amp;dubbo=2.0.2&amp;amp;dynamic=true&amp;amp;generic=false&amp;amp;interface=com.fy.common.service.slice.SliceService&amp;amp;lazy=false&amp;amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;amp;path=com.fy.common.service.slice.SliceService&amp;amp;pid=33176&amp;amp;protocol=dubbo&amp;amp;qos-enable=false&amp;amp;register=true&amp;amp;register.ip=183.6.56.146&amp;amp;release=2.7.2&amp;amp;remote.application=fy-slice&amp;amp;revision=1.1.0.RELEASE&amp;amp;side=consumer&amp;amp;sticky=false&amp;amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&amp;gt; /183.6.56.146:20881}
+org.apache.dubbo.rpc.RpcException: Failed to invoke the method deleteSlice in the service com.fy.common.service.slice.SliceService. Tried 3 times of the providers [183.6.56.146:20881] (1/1) from the registry 0.0.0.0:8848 on the consumer 183.6.56.146 using the dubbo version 2.7.2. Last error is: Invoke remote method timeout. method: deleteSlice, provider: dubbo://183.6.56.146:20881/com.fy.common.service.slice.SliceService?anyhost=true&amp;amp;application=fy-server&amp;amp;bean.name=ServiceBean:sliceService&amp;amp;category=providers&amp;amp;check=false&amp;amp;deprecated=false&amp;amp;dubbo=2.0.2&amp;amp;dynamic=true&amp;amp;generic=false&amp;amp;interface=com.fy.common.service.slice.SliceService&amp;amp;lazy=false&amp;amp;methods=getSlices,batchDeleteSlice,getSliceByUid,makeSlice,checkName,updateName,getUcsNum,deleteSliceByName,search,deleteSlice,getSliceDosage,getSliceByModel&amp;amp;path=com.fy.common.service.slice.SliceService&amp;amp;pid=33176&amp;amp;protocol=dubbo&amp;amp;qos-enable=false&amp;amp;register=true&amp;amp;register.ip=183.6.56.146&amp;amp;release=2.7.2&amp;amp;remote.application=fy-slice&amp;amp;revision=1.1.0.RELEASE&amp;amp;side=consumer&amp;amp;sticky=false&amp;amp;timestamp=1576225818455, cause: org.apache.dubbo.remoting.TimeoutException: Waiting server-side response timeout by scan timer. start time: 2019-12-16 16:49:49.676, end time: 2019-12-16 16:49:50.697, client elapsed: 0 ms, server elapsed: 1021 ms, timeout: 1000 ms, request: Request [id=27068, version=2.0.2, twoway=true, event=false, broken=false, data=RpcInvocation [methodName=deleteSlice, parameterTypes=[class java.lang.Long], arguments=[157648617865460], attachments={path=com.fy.common.service.slice.SliceService, interface=com.fy.common.service.slice.SliceService, version=0.0.0}]], channel: /183.6.56.146:65100 -&amp;gt; /183.6.56.146:20881&lt;/p&gt;
+
+&lt;p&gt;Got unchecked and undeclared exception which called by 183.6.56.146. service: com.fy.common.service.slice.GroupService, method: create, exception: java.lang.NullPointerException: null, dubbo version: 2.7.2, current host: 183.6.56.146&lt;/p&gt;
+
+&lt;p&gt;D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t  &lt;jmx file=&quot;&quot; path=&quot;&quot;&gt;  -l D:\test\baogao2.txt -e -o D:\test\baogao2&lt;/jmx&gt;&lt;/p&gt;
+
+&lt;p&gt;D:\jmeter\apache-jmeter-5.2.1\bin\jmeter -n -t  D:\test\http—183-6-56-146-8000-sliceadmin00.jmx  -l D:\test\baogao6.txt -e -o D:\test\baogao6&lt;/p&gt;
+
+&lt;h2 id=&quot;oss-sdk异常&quot;&gt;oss SDK异常&lt;/h2&gt;
+
+&lt;p&gt;SocketTimeoutException has occurred on a socket read or accept.&lt;/p&gt;
+
+&lt;p&gt;Server unreachable: javax.net.ssl.SSLHandshakeException: Remote host closed connection during handshake&lt;/p&gt;
+
+&lt;p&gt;Server unreachable: java.net.ConnectException: Connection timed out: connect&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;大部分是因为网络带宽不够，于是取消对前端的测试&lt;/p&gt;
+
+&lt;p&gt;11:38&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;HikariPool-1 - Connection is not available, request timed out after 30000ms&lt;/p&gt;
+
+&lt;p&gt;数据库连接超时 —&amp;gt;减少数据库连接缓解方式：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;使用redis&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;在查询模型的时候当第一次校验通过之后，将用户信息和模型信息保存在内存（设置过期时间，不然内存泄漏），第二次查询的时候直接访问内存获取模型权限（在模型删除、变更持有者和删除分享对象的时候需要删除对应用户和模型的关系）&lt;/p&gt;
+
+    &lt;p&gt;再考虑一次为什么不使用redis，redis可以多服务端共享并且过期和持久化都不需要自己实现，但是会增加网络的开销。综合来说先考虑使用redis作为缓存&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;orghibernatestalestateexception-batch-update-returned-unexpected-row-count-from-update-0-actual-row-count-0-expected-1&quot;&gt;org.hibernate.StaleStateException: Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1&lt;/h2&gt;
+
+&lt;p&gt;这是由于有一个表需要有查询条件，然后条件为null导致。&lt;/p&gt;
+
+&lt;p&gt;sql查询的时候内部是有先后顺序和逻辑关联的，&lt;/p&gt;
+
+&lt;p&gt;为什么为null呢，因为这是一个多表联查，关联的表数据已经被删除，所以关联的键自然也不存在，所以就返回了错误&lt;/p&gt;</content><author><name>floatthy</name></author><category term="学习" /><summary type="html">远程调用异常</summary></entry><entry><title type="html">微服务</title><link href="http://localhost:4000/2019/11/06/%E5%BE%AE%E6%9C%8D%E5%8A%A1/" rel="alternate" type="text/html" title="微服务" /><published>2019-11-06T00:00:00+08:00</published><updated>2019-11-06T00:00:00+08:00</updated><id>http://localhost:4000/2019/11/06/%E5%BE%AE%E6%9C%8D%E5%8A%A1</id><content type="html" xml:base="http://localhost:4000/2019/11/06/%E5%BE%AE%E6%9C%8D%E5%8A%A1/">&lt;h2 id=&quot;akf拆分&quot;&gt;akf拆分&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-11-6/16e362895edf392a&quot; alt=&quot;img&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;三个维度拆分&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-11-6/image-20191106191219017.png&quot; alt=&quot;image-20191106191219017&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;删除没有限定是管理员&lt;/p&gt;
+
+&lt;p&gt;&lt;del&gt;getUserInfo 接口删除&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;generateInvCodeForAdmin 没有限定管理员&lt;/p&gt;
+
+&lt;p&gt;recharge 充值没有限定管理员&lt;/p&gt;
+
+&lt;p&gt;dao&lt;/p&gt;
+
+&lt;p&gt;&lt;del&gt;getUserWithOSSPathByModelUid 去掉模型&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;del&gt;getPerm会出错，需要修改&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;reset 没有限定管理员&lt;/p&gt;
+
+&lt;p&gt;&lt;del&gt;dsl删除用户点云数量&lt;/del&gt;&lt;/p&gt;
+
+&lt;p&gt;adminSearch  modelservice 没有限定为管理员&lt;/p&gt;
+
+&lt;p&gt;adminDelete 没有限定为管理员&lt;/p&gt;
+
+&lt;p&gt;adminAdd 没有限定为管理员&lt;/p&gt;
+
+&lt;p&gt;&lt;del&gt;getUserInfo 被删除&lt;/del&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;数据库微服务改造&quot;&gt;数据库微服务改造&lt;/h2&gt;
+
+&lt;p&gt;在老系统中存在很多跨表join查询，然而在微服务改造过程中，跨表变为了跨库，在跨库的情况下如何解决join查询的问题需要解决&lt;/p&gt;
+
+&lt;h3 id=&quot;1冗余储存&quot;&gt;1、冗余储存&lt;/h3&gt;
+
+&lt;p&gt;在查询的被关联表冗余查询&lt;/p&gt;
+
+&lt;p&gt;以空间换时间&lt;/p&gt;
+
+&lt;p&gt;优点：查询效率较高&lt;/p&gt;
+
+&lt;p&gt;缺点：需要建立同步机制，不然容易产生脏数据&lt;/p&gt;
+
+&lt;h3 id=&quot;2表同步&quot;&gt;2、表同步&lt;/h3&gt;
+
+&lt;p&gt;依赖字段很多做表同步&lt;/p&gt;
+
+&lt;p&gt;ETL工具跨库&lt;/p&gt;
+
+&lt;p&gt;缺点：同步不建议实时性过高，否则影响性能&lt;/p&gt;
+
+&lt;h3 id=&quot;3数据字典表&quot;&gt;3、数据字典表&lt;/h3&gt;
+
+&lt;p&gt;在每个数据库中对静态不会修改的字段冗余保存一份&lt;/p&gt;
+
+&lt;h3 id=&quot;4服务层数据组装&quot;&gt;4、服务层数据组装&lt;/h3&gt;
+
+&lt;h2 id=&quot;domain-driven-design&quot;&gt;Domain Driven Design&lt;/h2&gt;
+
+&lt;p&gt;书单：&lt;/p&gt;
+
+&lt;p&gt;领域驱动设计&lt;/p&gt;
+
+&lt;p&gt;实现领域驱动&lt;/p&gt;
+
+&lt;h2 id=&quot;拆分&quot;&gt;拆分&lt;/h2&gt;
+
+&lt;h3 id=&quot;职责划分&quot;&gt;职责划分&lt;/h3&gt;
+
+&lt;h3 id=&quot;通用性划分&quot;&gt;通用性划分&lt;/h3&gt;
+
+&lt;p&gt;大中台小前台&lt;/p&gt;
+
+&lt;h3 id=&quot;粒度&quot;&gt;粒度&lt;/h3&gt;
+
+&lt;p&gt;满足业务需求&lt;/p&gt;
+
+&lt;p&gt;团队成员工作量适中&lt;/p&gt;
+
+&lt;p&gt;增量迭代  修改只涉及到有限的服务&lt;/p&gt;
+
+&lt;p&gt;风险可控&lt;/p&gt;
+
+&lt;h2 id=&quot;数据建模&quot;&gt;数据建模&lt;/h2&gt;
+
+&lt;p&gt;mysqlWorkbench&lt;/p&gt;
+
+&lt;p&gt;实际开发流程：&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-11-6/image-20191114151641590.png&quot; alt=&quot;image-20191114151641590&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;MySQL底层是通过数据页存储&lt;/p&gt;
+
+&lt;p&gt;spring boot 可以读取jar包相同路径的配置文件&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/images/2019-11-6/image-20191114120156922.png&quot; alt=&quot;image-20191114120156922&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;运维要求&lt;/p&gt;</content><author><name>floatthy</name></author><summary type="html">akf拆分</summary></entry><entry><title type="html">Js整理</title><link href="http://localhost:4000/2019/10/31/js%E6%95%B4%E7%90%86/" rel="alternate" type="text/html" title="Js整理" /><published>2019-10-31T00:00:00+08:00</published><updated>2019-10-31T00:00:00+08:00</updated><id>http://localhost:4000/2019/10/31/js%E6%95%B4%E7%90%86</id><content type="html" xml:base="http://localhost:4000/2019/10/31/js%E6%95%B4%E7%90%86/">&lt;h1 id=&quot;nodejs&quot;&gt;Nodejs&lt;/h1&gt;
+
+&lt;h2 id=&quot;npm&quot;&gt;Npm&lt;/h2&gt;
+
+&lt;p&gt;npm全称为Node Package Manager，是一个基于&lt;a href=&quot;http://lib.csdn.net/base/nodejs&quot;&gt;Node.js&lt;/a&gt;的包管理器，也是整个Node.js社区最流行、支持的第三方模块最多的包管理器。&lt;/p&gt;
+
+&lt;h2 id=&quot;aws-redshift&quot;&gt;aws redshift&lt;/h2&gt;
+
+&lt;p&gt;Amazon Redshift 是一种可轻松扩展的完全托管型 PB 级数据仓库服务，可与您现有的商业智能工具协作。它通过使用列存储技术和并行化多个节点的查询来提供快速的查询性能&lt;/p&gt;
+
+&lt;p&gt;这种方式运行部分JavaScript代码没有问题，但由于浏览器的安全限制，以&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;file://&lt;/code&gt;开头的地址无法执行如联网等JavaScript代码，最终，你还是需要架设一个Web服务器，然后以&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://&lt;/code&gt;开头的地址来正常执行所有JavaScript代码&lt;/p&gt;
+
+&lt;p&gt;第一种是&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;==&lt;/code&gt;比较，它会自动转换数据类型再比较，很多时候，会得到非常诡异的结果；&lt;/p&gt;
+
+&lt;p&gt;第二种是&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;===&lt;/code&gt;比较，它不会自动转换数据类型，如果数据类型不一致，返回&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;false&lt;/code&gt;，如果一致，再比较。&lt;/p&gt;
+
+&lt;p&gt;由于JavaScript这个设计缺陷，&lt;em&gt;不要&lt;/em&gt;使用&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;==&lt;/code&gt;比较，始终坚持使用&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;===&lt;/code&gt;比较。&lt;/p&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;null&lt;/code&gt;表示一个“空”的值，它和&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0&lt;/code&gt;以及空字符串&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;''&lt;/code&gt;不同，&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0&lt;/code&gt;是一个数值，&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;''&lt;/code&gt;表示长度为0的字符串，而&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;null&lt;/code&gt;表示“空”。 在JavaScript中，还有一个和&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;null&lt;/code&gt;类似的&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;undefined&lt;/code&gt;，它表示“未定义”。&lt;/p&gt;
+
+&lt;p&gt;如果&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;if&lt;/code&gt;的条件判断语句结果不是&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true&lt;/code&gt;或&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;false&lt;/code&gt;怎么办？例如：&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;s&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;dl&quot;&gt;'&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;123&lt;/span&gt;&lt;span class=&quot;dl&quot;&gt;'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// 条件计算结果为3&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;//&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;JavaScript把&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;null&lt;/code&gt;、&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;undefined&lt;/code&gt;、&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0&lt;/code&gt;、&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;NaN&lt;/code&gt;和空字符串&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;''&lt;/code&gt;视为&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;false&lt;/code&gt;，其他值一概视为&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true&lt;/code&gt;，因此上述代码条件判断的结果是&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true&lt;/code&gt;。&lt;/p&gt;
+
+&lt;h2 id=&quot;async&quot;&gt;async&lt;/h2&gt;
+
+&lt;p&gt;返回值为一个promise对象，需要通过then函数获得具体返回值&lt;/p&gt;
+
+&lt;h2 id=&quot;模块加载机制&quot;&gt;模块加载机制&lt;/h2&gt;
+
+&lt;p&gt;Node自动在js文件加载时包裹匿名函数，使得内部变量变成局部变量&lt;/p&gt;
+
+&lt;h2 id=&quot;js字符串&quot;&gt;js字符串&lt;/h2&gt;
+
+&lt;p&gt;转义字符&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\&lt;/code&gt;可以转义很多字符，比如&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\n&lt;/code&gt;表示换行，&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\t&lt;/code&gt;表示制表符，字符&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\&lt;/code&gt;本身也要转义，所以&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\\表示的字符就是\&lt;/code&gt;。&lt;/p&gt;
+
+&lt;h2 id=&quot;js数组&quot;&gt;Js数组&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Array&lt;/code&gt;可以通过索引把对应的元素修改为新的值，因此，对&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Array&lt;/code&gt;的索引进行赋值会直接修改这个&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Array&lt;/code&gt;：&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;请注意&lt;/em&gt;，如果通过索引赋值时，索引超过了范围，同样会引起&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Array&lt;/code&gt;大小的变化：&lt;/p&gt;
+
+&lt;p&gt;Javascript不能直接用==或者===来判断两个数组是否相等，无论是相等还是全等都不行，以下两行JS代码都会返回false&lt;/p&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;script&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;type&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;dl&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;text/javascript&lt;/span&gt;&lt;span class=&quot;dl&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;err&quot;&gt;　　&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;alert&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;==&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[]);&lt;/span&gt;
+&lt;span class=&quot;err&quot;&gt;　　&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;alert&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;([]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;===&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[]);&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;sr&quot;&gt;/script&lt;/span&gt;&lt;span class=&quot;err&quot;&gt;&amp;gt;
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;要判断JS中的两个数组是否相同，需要先将数组转换为字符串，再作比较。以下两行代码将返回true&lt;/p&gt;
+
+&lt;h2 id=&quot;对象&quot;&gt;对象&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;xiaohong&lt;/code&gt;的属性名&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;middle-school&lt;/code&gt;不是一个有效的变量，就需要用&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;''&lt;/code&gt;括起来。访问这个属性也无法使用&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.&lt;/code&gt;操作符，必须用&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;['xxx']&lt;/code&gt;来访问：&lt;/p&gt;
+
+&lt;h2 id=&quot;作用域&quot;&gt;作用域&lt;/h2&gt;
+
+&lt;div class=&quot;language-javascript highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nx&quot;&gt;Window&lt;/span&gt;
+
+&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;arr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[];&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;length&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;){&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;arr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;arr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;concat&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;nx&quot;&gt;console&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;log&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;arr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;arr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;pow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+
+  &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;}).&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;reduce&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kd&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;){&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nx&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;+&lt;/span&gt;&lt;span class=&quot;nx&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+ 
+ 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;将字符串转换成数字 使用map和reduce方法&lt;/p&gt;</content><author><name>floatthy</name></author><summary type="html">Nodejs</summary></entry><entry><title type="html">书单</title><link href="http://localhost:4000/2019/10/31/%E4%B9%A6%E5%8D%95/" rel="alternate" type="text/html" title="书单" /><published>2019-10-31T00:00:00+08:00</published><updated>2019-10-31T00:00:00+08:00</updated><id>http://localhost:4000/2019/10/31/%E4%B9%A6%E5%8D%95</id><content type="html" xml:base="http://localhost:4000/2019/10/31/%E4%B9%A6%E5%8D%95/">&lt;p&gt;Balancing Agility and Discipline  软件架构&lt;/p&gt;</content><author><name>floatthy</name></author><summary type="html">Balancing Agility and Discipline 软件架构</summary></entry><entry><title type="html">管理后台</title><link href="http://localhost:4000/2019/10/25/%E7%AE%A1%E7%90%86%E5%90%8E%E5%8F%B0/" rel="alternate" type="text/html" title="管理后台" /><published>2019-10-25T00:00:00+08:00</published><updated>2019-10-25T00:00:00+08:00</updated><id>http://localhost:4000/2019/10/25/%E7%AE%A1%E7%90%86%E5%90%8E%E5%8F%B0</id><content type="html" xml:base="http://localhost:4000/2019/10/25/%E7%AE%A1%E7%90%86%E5%90%8E%E5%8F%B0/">&lt;p&gt;[TOC]&lt;/p&gt;
+
+&lt;h2 id=&quot;模型&quot;&gt;模型&lt;/h2&gt;
+
+&lt;h3 id=&quot;列表介绍&quot;&gt;列表介绍&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025101040835.png&quot; alt=&quot;image-20191025101040835&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;变更&quot;&gt;变更&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025101253620.png&quot; alt=&quot;image-20191025101253620&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;搜索&quot;&gt;搜索&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025101646631.png&quot; alt=&quot;image-20191025101646631&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;用户&quot;&gt;用户&lt;/h2&gt;
+
+&lt;h3 id=&quot;列表&quot;&gt;列表&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025102305557.png&quot; alt=&quot;image-20191025102305557&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;搜索-1&quot;&gt;搜索&lt;/h3&gt;
+
+&lt;p&gt;同模型列表使用方法&lt;/p&gt;
+
+&lt;h3 id=&quot;添加&quot;&gt;添加&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025103738371.png&quot; alt=&quot;image-20191025103738371&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;编辑&quot;&gt;编辑&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025103016134.png&quot; alt=&quot;image-20191025103016134&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;充额&quot;&gt;充额&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025103344658.png&quot; alt=&quot;image-20191025103344658&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;重置&quot;&gt;重置&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025103522677.png&quot; alt=&quot;image-20191025103522677&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;角色设置管理&quot;&gt;角色设置管理&lt;/h2&gt;
+
+&lt;p&gt;用户角色是对不同组的成员访问后台接口的权限控制。&lt;/p&gt;
+
+&lt;p&gt;规则：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;所有人都可以访问用户的权限&lt;/li&gt;
+  &lt;li&gt;超级管理员可访问所有资源&lt;/li&gt;
+  &lt;li&gt;开发和运营不能访问对方有但自己没有的资源&lt;/li&gt;
+  &lt;li&gt;部分资源没有加入权限管理的范围，比如登录接口，但是在这里却显示可以设置（这是一个bug，但是修改起来繁琐不影响使用就没有实现）&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;添加-1&quot;&gt;添加&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025104941171.png&quot; alt=&quot;image-20191025104941171&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;修改&quot;&gt;修改&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025105442520.png&quot; alt=&quot;image-20191025105442520&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;删除&quot;&gt;删除&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025105634497.png&quot; alt=&quot;image-20191025105634497&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;个人信息修改&quot;&gt;个人信息修改&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025105803743.png&quot; alt=&quot;image-20191025105803743&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;管理员管理&quot;&gt;管理员管理&lt;/h2&gt;
+
+&lt;h3 id=&quot;添加-2&quot;&gt;添加&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025110332265.png&quot; alt=&quot;image-20191025110332265&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;从用户组添加&quot;&gt;从用户组添加&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025110537097.png&quot; alt=&quot;image-20191025110537097&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;编辑-1&quot;&gt;编辑&lt;/h3&gt;
+
+&lt;p&gt;编辑同用户组编辑&lt;/p&gt;
+
+&lt;h3 id=&quot;删除-1&quot;&gt;删除&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025110715754.png&quot; alt=&quot;image-20191025110715754&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;服务器状态&quot;&gt;服务器状态&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025110927361.png&quot; alt=&quot;image-20191025110927361&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;api文档&quot;&gt;api文档&lt;/h2&gt;
+
+&lt;p&gt;&lt;img src=&quot;C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20191025111041164.png&quot; alt=&quot;image-20191025111041164&quot; /&gt;&lt;/p&gt;</content><author><name>floatthy</name></author><summary type="html">[TOC]</summary></entry><entry><title type="html">任务</title><link href="http://localhost:4000/2019/10/10/%E4%BB%BB%E5%8A%A1/" rel="alternate" type="text/html" title="任务" /><published>2019-10-10T00:00:00+08:00</published><updated>2019-10-10T00:00:00+08:00</updated><id>http://localhost:4000/2019/10/10/%E4%BB%BB%E5%8A%A1</id><content type="html" xml:base="http://localhost:4000/2019/10/10/%E4%BB%BB%E5%8A%A1/">&lt;p&gt;切片待优化：&lt;/p&gt;
+
+&lt;p&gt;将任务的数量的统计使用count具体任务，从而减少数据库读写错误导致计数错误   todo（放在后面）
+统一异常捕获返回   统一异常捕获返回效率较慢，没有必要
+统一模型权限控制   todo&lt;/p&gt;
+
+&lt;p&gt;一个函数里面多个事务提交（保证一致性）     todo  —事务在 for update的查询语句保存之后还会锁表，直到结束，所以不合适，需要修改业务调用
+使用乐观锁，将计数的功能移到redis（是一种解决办法，后面优化）&lt;/p&gt;
+
+&lt;p&gt;待增加功能：
+后台框架调整&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;已有任务：&lt;/p&gt;
+
+&lt;p&gt;1、三维数据管理前端更新后台修改&lt;/p&gt;
+
+&lt;p&gt;2、切片服务维护和bug修复&lt;/p&gt;
+
+&lt;p&gt;3、用户系统与APP打通&lt;/p&gt;
+
+&lt;p&gt;4、对外的计算服务搭建&lt;/p&gt;
+
+&lt;p&gt;5、新的文件储存方式解决   SAN&lt;/p&gt;
+
+&lt;p&gt;6、切片公司管理后台前端和后台&lt;/p&gt;
+
+&lt;p&gt;7、桥的管理系统和数据库、dao层开发&lt;/p&gt;
+
+&lt;p&gt;8、广州历史地图历史街区更新（待定）&lt;/p&gt;
+
+&lt;hr /&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;订单系统&lt;/li&gt;
+  &lt;li&gt;账号合并&lt;/li&gt;
+  &lt;li&gt;模型合并&lt;/li&gt;
+  &lt;li&gt;APP新版&lt;/li&gt;
+  &lt;li&gt;三维数据移动端&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;之前需要做：&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;方舆管理
+    &lt;ol&gt;
+      &lt;li&gt;角色及管理&lt;/li&gt;
+      &lt;li&gt;平台用户，要能够修改额度&lt;/li&gt;
+      &lt;li&gt;模型&lt;/li&gt;
+      &lt;li&gt;切片&lt;/li&gt;
+    &lt;/ol&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;</content><author><name>floatthy</name></author><summary type="html"></summary></entry><entry><title type="html">锁</title><link href="http://localhost:4000/%E9%94%81/2019/09/30/%E9%94%81%E7%AD%89%E5%BE%85%E4%B8%8E%E6%AD%BB%E9%94%81/" rel="alternate" type="text/html" title="锁" /><published>2019-09-30T00:00:00+08:00</published><updated>2019-09-30T00:00:00+08:00</updated><id>http://localhost:4000/%E9%94%81/2019/09/30/%E9%94%81%E7%AD%89%E5%BE%85%E4%B8%8E%E6%AD%BB%E9%94%81</id><content type="html" xml:base="http://localhost:4000/%E9%94%81/2019/09/30/%E9%94%81%E7%AD%89%E5%BE%85%E4%B8%8E%E6%AD%BB%E9%94%81/">&lt;p&gt;MVCC：Multi-Version Concurrent Control 多版本并发控制&lt;/p&gt;
+
+&lt;h2 id=&quot;排它锁&quot;&gt;排它锁&lt;/h2&gt;
+
+&lt;p&gt;其他事务不能读取和修改&lt;/p&gt;
+
+&lt;p&gt;MySQL有三种级别：页级、表级、行级。&lt;/p&gt;
+
+&lt;p&gt;表级锁：开销小，加锁快；锁定粒度大，发生锁冲突的概率最高,并发度最低。&lt;/p&gt;
+
+&lt;p&gt;行级锁：开销大，加锁慢；锁定粒度最小，发生锁冲突的概率最低,并发度也最高。&lt;/p&gt;
+
+&lt;p&gt;页面锁：开销和加锁时间界于表锁和行锁之间；锁定粒度界于表锁和行锁之间，并发度一般&lt;/p&gt;
+
+&lt;h2 id=&quot;共享锁&quot;&gt;共享锁&lt;/h2&gt;
+
+&lt;p&gt;其他事务可以读取，不能修改&lt;/p&gt;
+
+&lt;h2 id=&quot;发生死锁原因&quot;&gt;发生死锁原因&lt;/h2&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;业务逻辑问题，使得上锁顺序颠倒。锁表和锁行都可能发生&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;共享锁上升到排它锁&lt;/li&gt;
+  &lt;li&gt;在锁有索引的情况下，如果在索引里面有多个添加索引的字段，字段顺序相反&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;mysql-innodb&quot;&gt;mysql innodb&lt;/h2&gt;
+
+&lt;h3 id=&quot;乐观锁&quot;&gt;乐观锁&lt;/h3&gt;
+
+&lt;h3 id=&quot;悲观锁&quot;&gt;悲观锁&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;获取结果集之后，对结果集加行锁&lt;/li&gt;
+  &lt;li&gt;对于非主键、非索引字段查询加表锁&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;sql语句&lt;/p&gt;
+
+&lt;p&gt;实现：通过for update（在没有指定主键的情况下，innodb的行锁将变成表锁）&lt;/p&gt;
+
+&lt;p&gt;解决：幻读&lt;/p&gt;
+
+&lt;p&gt;引发：死锁（两个(或以上)的Session加锁的顺序不一致）&lt;/p&gt;
+
+&lt;p&gt;Jpa实现&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;线程加上事务： &lt;strong&gt;@Transactional(isolation = Isolation.READ_COMMITTED)&lt;/strong&gt; 等&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;strong&gt;注意：事务注解添加的时候嵌套容易引发死锁&lt;/strong&gt;&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;自己写的查询语句注解：&lt;strong&gt;@Lock(value = LockModeType.PESSIMISTIC_WRITE)&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;</content><author><name>floatthy</name></author><category term="学习" /><summary type="html">MVCC：Multi-Version Concurrent Control 多版本并发控制</summary></entry><entry><title type="html">项目管理</title><link href="http://localhost:4000/git/2019/09/30/github%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86/" rel="alternate" type="text/html" title="项目管理" /><published>2019-09-30T00:00:00+08:00</published><updated>2019-09-30T00:00:00+08:00</updated><id>http://localhost:4000/git/2019/09/30/github%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86</id><content type="html" xml:base="http://localhost:4000/git/2019/09/30/github%E9%A1%B9%E7%9B%AE%E7%AE%A1%E7%90%86/">&lt;ol&gt;
+  &lt;li&gt;本地拥有所有的git记录，所以大部分操作都是本地进行&lt;/li&gt;
+  &lt;li&gt;git保证完整性通过hash算法获得散列值&lt;/li&gt;
+  &lt;li&gt;&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;project&lt;/p&gt;</content><author><name>floatthy</name></author><category term="学习" /><summary type="html">本地拥有所有的git记录，所以大部分操作都是本地进行 git保证完整性通过hash算法获得散列值</summary></entry><entry><title type="html">loadRunner</title><link href="http://localhost:4000/%E5%8E%8B%E6%B5%8B/2019/09/09/loadRunner/" rel="alternate" type="text/html" title="loadRunner" /><published>2019-09-09T00:00:00+08:00</published><updated>2019-09-09T00:00:00+08:00</updated><id>http://localhost:4000/%E5%8E%8B%E6%B5%8B/2019/09/09/loadRunner</id><content type="html" xml:base="http://localhost:4000/%E5%8E%8B%E6%B5%8B/2019/09/09/loadRunner/">&lt;h2 id=&quot;负载测试压力测试性能测试&quot;&gt;负载测试&amp;amp;压力测试&amp;amp;性能测试&lt;/h2&gt;
+
+&lt;p&gt;性能调优&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;通过对处在特定环境下的系统进行测试以完成相关的验证，而且往往要根据测试的结果，对系统的设计、代码和配置等进行调整，提高系统的性能。许多时候，系统性能的改善是测试、调整、再测试、再调整、……一个持续改进的过程&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;h3 id=&quot;负载测试&quot;&gt;负载测试&lt;/h3&gt;
+
+&lt;p&gt;获得系统正常工作时所能承受的最大负荷（容量）&lt;/p&gt;
+
+&lt;h3 id=&quot;压力测试&quot;&gt;压力测试&lt;/h3&gt;
+
+&lt;p&gt;系统奔溃的极限条件以及系统是否能自我恢复&lt;/p&gt;
+
+&lt;h3 id=&quot;性能测试&quot;&gt;性能测试&lt;/h3&gt;
+
+&lt;p&gt;获取系统在特定条件下的性能指标数据&lt;/p&gt;
+
+&lt;h2 id=&quot;步骤&quot;&gt;步骤&lt;/h2&gt;
+
+&lt;h3 id=&quot;创建脚本&quot;&gt;创建脚本&lt;/h3&gt;
+
+&lt;h3 id=&quot;中央控制器调度虚拟用户&quot;&gt;中央控制器调度虚拟用户&lt;/h3&gt;
+
+&lt;h3 id=&quot;运行并获得结果&quot;&gt;运行并获得结果&lt;/h3&gt;
+
+&lt;h2 id=&quot;性能需求&quot;&gt;性能需求&lt;/h2&gt;
+
+&lt;p&gt;&lt;strong&gt;多少用户&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;做&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;什么业务&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;的&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;响应时间控制在某个范围&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;tps不低于&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;系统资源占用&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;整体平稳&lt;/p&gt;
+
+&lt;h2 id=&quot;socket_io脚本&quot;&gt;socket_io脚本&lt;/h2&gt;
+
+&lt;hr /&gt;
+
+&lt;p&gt;我想用loadrunner测试websocket&lt;/p&gt;
+
+&lt;p&gt;lr12写好脚本，然而只支持50的并发，根本不够用。然后换回11,11和12的脚本不兼容，并且11也支持100的websocket测试，，，，&lt;/p&gt;
+
+&lt;p&gt;所以做了一个决定，抛弃各种限制的loadrunner，改用jmeter测试&lt;/p&gt;
+
+&lt;p&gt;pv page view&lt;/p&gt;
+
+&lt;p&gt;内存泄露&lt;/p&gt;
+
+&lt;p&gt;连接泄露&lt;/p&gt;
+
+&lt;p&gt;性能瓶颈&lt;/p&gt;
+
+&lt;p&gt;top&lt;/p&gt;</content><author><name>floatthy</name></author><category term="学习" /><summary type="html">负载测试&amp;amp;压力测试&amp;amp;性能测试</summary></entry></feed>
